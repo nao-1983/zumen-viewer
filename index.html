@@ -312,8 +312,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
 </div>
 
 <div id="toast"></div>
-<input type="file" id="fin-pdf" accept="application/pdf" style="display:none">
-<input type="file" id="fin-proj" accept=".zumen,.json,.txt,application/json,text/plain" style="display:none">
+<!-- file inputs: wrapped in label so iPad Safari can trigger reliably -->
+<label id="label-pdf" style="display:none"><input type="file" id="fin-pdf" accept="application/pdf"></label>
+<label id="label-proj" style="display:none"><input type="file" id="fin-proj" accept=".zumen,.json,.txt,application/json,text/plain"></label>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -871,12 +872,28 @@ async function loadFromJSON(json, label){
   }
 }
 
-document.getElementById('btn-load').addEventListener('click',()=>{
-  document.getElementById('fin-proj').click();
-});
+function triggerFilePicker(inputId){
+  // iPad-safe: temporarily make label visible and click it
+  const lbl=document.getElementById('label-'+inputId.replace('fin-',''));
+  if(lbl){
+    lbl.style.position='fixed';
+    lbl.style.opacity='0';
+    lbl.style.top='0';lbl.style.left='0';
+    lbl.style.width='100%';lbl.style.height='100%';
+    lbl.style.zIndex='9999';
+    lbl.style.display='block';
+    // click the actual input inside the label
+    document.getElementById(inputId).click();
+    setTimeout(()=>{lbl.style.display='none';},500);
+  } else {
+    document.getElementById(inputId).click();
+  }
+}
+
+document.getElementById('btn-load').addEventListener('click',()=>triggerFilePicker('fin-proj'));
 document.getElementById('btn-load').addEventListener('touchend',e=>{
-  e.preventDefault(); e.stopPropagation();
-  document.getElementById('fin-proj').click();
+  e.preventDefault();e.stopPropagation();
+  triggerFilePicker('fin-proj');
 },{passive:false});
 
 document.getElementById('fin-proj').addEventListener('change',async e=>{
@@ -916,7 +933,7 @@ function showLoadModal(){
   });
   document.getElementById('load-file-btn').addEventListener('click',()=>{
     m.remove();
-    document.getElementById('fin-proj').click();
+    triggerFilePicker('fin-proj');
   });
   document.getElementById('load-close-btn').addEventListener('click',()=>m.remove());
   m.addEventListener('click',e=>{if(e.target===m)m.remove()});
@@ -925,16 +942,15 @@ function showLoadModal(){
 }
 
 /* ========== TOOLBAR ========== */
-document.getElementById('btn-pdf').addEventListener('click',()=>document.getElementById('fin-pdf').click());
-document.getElementById('btn-pdf2').addEventListener('click',()=>document.getElementById('fin-pdf').click());
-// iPad: btn-pdf2 inside #dz needs direct touch handling
+document.getElementById('btn-pdf').addEventListener('click',()=>triggerFilePicker('fin-pdf'));
+document.getElementById('btn-pdf2').addEventListener('click',()=>triggerFilePicker('fin-pdf'));
 document.getElementById('btn-pdf2').addEventListener('touchend',e=>{
   e.preventDefault();e.stopPropagation();
-  document.getElementById('fin-pdf').click();
+  triggerFilePicker('fin-pdf');
 },{passive:false});
 document.getElementById('btn-pdf').addEventListener('touchend',e=>{
   e.preventDefault();e.stopPropagation();
-  document.getElementById('fin-pdf').click();
+  triggerFilePicker('fin-pdf');
 },{passive:false});
 document.getElementById('fin-pdf').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadPDF(f);e.target.value='';});
 
