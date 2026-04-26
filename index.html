@@ -763,24 +763,32 @@ document.getElementById('fov-x').addEventListener('click',()=>{
 });
 
 /* ========== SAVE / LOAD PROJECT ========== */
-function doSave(){
-  if(symbols.length===0){toast('シンボルがありません');return;}
-  const data={version:2,pdfFileName,symbols:symbols.map(s=>({
+function buildSaveData(){
+  return {version:2,pdfFileName,symbols:symbols.map(s=>({
     id:s.id,name:s.name,type:s.type,memo:s.memo,
     x:s.x,y:s.y,pageNum:s.pageNum,
     files:s.files.map(f=>({name:f.name,mime:f.mime,dataURL:f.dataURL}))
   }))};
+}
+
+function doSave(){
+  if(symbols.length===0){toast('シンボルがありません');return;}
+  const data=buildSaveData();
   const json=JSON.stringify(data);
   const fname=(pdfFileName.replace(/\.pdf$/i,'')||'zumen')+'.zumen';
   const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
-  if(isIOS){
-    // iOS Safari: open as text in new tab with instructions
-    const blob=new Blob([json],{type:'text/plain;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
-    // Show save modal instead
-    showSaveModal(json,fname);
-    URL.revokeObjectURL(url);
+
+  if(isIOS && navigator.share){
+    // iOS16+: Web Share API でファイルアプリに直接保存できる
+    const blob=new Blob([json],{type:'application/octet-stream'});
+    const file=new File([blob],fname,{type:'application/octet-stream'});
+    navigator.share({files:[file],title:fname})
+      .then(()=>toast('保存しました'))
+      .catch(err=>{
+        if(err.name!=='AbortError') showSaveModal(json,fname);
+      });
   } else {
+    // PC / Android: 通常ダウンロード
     const blob=new Blob([json],{type:'application/octet-stream'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
@@ -793,39 +801,30 @@ function doSave(){
 }
 
 function showSaveModal(json,fname){
-  // Create a modal with copy button for iOS
   const existing=document.getElementById('save-modal');
   if(existing) existing.remove();
   const m=document.createElement('div');
   m.id='save-modal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:flex-end;justify-content:center;';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)';
   m.innerHTML=`
-    <div style="background:var(--surface);width:100%;max-width:540px;border-radius:16px 16px 0 0;padding:20px;max-height:80vh;display:flex;flex-direction:column;gap:12px;">
-      <div style="font-size:15px;font-weight:600;">プロジェクトを保存</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6;">
-        iPadではファイルを直接ダウンロードできません。<br>
-        以下の手順で保存してください：<br>
-        ① 下の「コピー」ボタンをタップ<br>
-        ② メモ帳などに貼り付け<br>
-        ③ <b>${fname}</b> というファイル名で保存<br>
-        ④ 次回は「読込」ボタンで読み込み
+    <div style="background:var(--surface);width:100%;max-width:540px;border-radius:16px 16px 0 0;padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <div style="font-size:15px;font-weight:600;">⚠️ 共有に失敗しました</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;">
+        Safariの共有機能が使えませんでした。<br>
+        下の「データをコピー」を押してから、<br>
+        <b>メモアプリ</b>に貼り付けて保存してください。<br>
+        次回は「読込」ボタンでそのメモを選択します。
       </div>
-      <textarea id="save-json" readonly style="width:100%;height:100px;font-size:11px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-family:monospace;resize:none;">${json.replace(/</g,'&lt;')}</textarea>
       <div style="display:flex;gap:8px;">
-        <button id="save-copy-btn" style="flex:1;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)">コピー</button>
-        <button id="save-close-btn" style="padding:12px 18px;border:1px solid var(--border2);background:none;color:var(--text);border-radius:10px;font-size:15px;cursor:pointer;font-family:var(--font)">閉じる</button>
+        <button id="save-copy-btn" style="flex:1;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)">📋 データをコピー</button>
+        <button id="save-close-btn" style="padding:13px 16px;border:1px solid var(--border2);background:none;color:var(--text);border-radius:10px;font-size:15px;cursor:pointer;font-family:var(--font)">閉じる</button>
       </div>
     </div>`;
   document.body.appendChild(m);
-  const ta=document.getElementById('save-json');
-  ta.value=json;
   document.getElementById('save-copy-btn').addEventListener('click',()=>{
-    ta.select();
-    try{
-      navigator.clipboard.writeText(json).then(()=>toast('コピーしました')).catch(()=>{
-        document.execCommand('copy');toast('コピーしました');
-      });
-    }catch(e){document.execCommand('copy');toast('コピーしました');}
+    navigator.clipboard.writeText(json)
+      .then(()=>{toast('コピーしました — メモに貼り付けて保存してください');m.remove();})
+      .catch(()=>toast('コピーに失敗しました'));
   });
   document.getElementById('save-close-btn').addEventListener('click',()=>m.remove());
   m.addEventListener('click',e=>{if(e.target===m)m.remove()});
@@ -833,21 +832,71 @@ function showSaveModal(json,fname){
 
 document.getElementById('btn-save').addEventListener('click',doSave);
 
-document.getElementById('btn-load').addEventListener('click',()=>document.getElementById('fin-proj').click());
-document.getElementById('fin-proj').addEventListener('change',async e=>{
-  const f=e.target.files[0]; if(!f) return;
+function loadFromJSON(json, label){
   try{
-    const text=await f.text();
-    const data=JSON.parse(text);
+    const data=JSON.parse(json);
     if(!data.symbols) throw new Error('invalid');
     symbols=data.symbols.map(s=>({...s,el:null}));
     pdfFileName=data.pdfFileName||'';
     renderAllPins(); updateSB();
     toast(`${symbols.length}件のシンボルを読み込みました`);
-    st(`プロジェクト「${f.name}」を読み込みました — 同じPDFを開いてください`);
-  }catch(err){toast('プロジェクトファイルの読み込みに失敗しました');}
+    st(`「${label}」を読み込みました — 同じPDFを開いてください`);
+  }catch(err){toast('データの読み込みに失敗しました — 正しいファイルか確認してください');}
+}
+
+document.getElementById('btn-load').addEventListener('click',()=>{
+  const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
+  if(isIOS){
+    showLoadModal();
+  } else {
+    document.getElementById('fin-proj').click();
+  }
+});
+
+document.getElementById('fin-proj').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const text=await f.text();
+  loadFromJSON(text, f.name);
   e.target.value='';
 });
+
+function showLoadModal(){
+  const existing=document.getElementById('load-modal');
+  if(existing) existing.remove();
+  const m=document.createElement('div');
+  m.id='load-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:flex-end;justify-content:center;padding-bottom:env(safe-area-inset-bottom)';
+  m.innerHTML=`
+    <div style="background:var(--surface);width:100%;max-width:540px;border-radius:16px 16px 0 0;padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <div style="font-size:15px;font-weight:600;">プロジェクトを読み込む</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;">
+        保存時にコピーしたデータを下に貼り付けてください。<br>
+        または「ファイルから選択」で .zumen ファイルを選択してください。
+      </div>
+      <textarea id="load-paste" placeholder="ここに貼り付け..." style="width:100%;height:120px;font-size:12px;padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-family:monospace;resize:none;-webkit-appearance:none;"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button id="load-paste-btn" style="flex:1;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)">貼り付けて読込</button>
+        <button id="load-file-btn" style="flex:1;padding:13px;border:1px solid var(--border2);background:none;color:var(--text);border-radius:10px;font-size:14px;cursor:pointer;font-family:var(--font)">ファイルから選択</button>
+      </div>
+      <button id="load-close-btn" style="padding:10px;border:none;background:none;color:var(--text3);font-size:14px;cursor:pointer;font-family:var(--font)">閉じる</button>
+    </div>`;
+  document.body.appendChild(m);
+
+  document.getElementById('load-paste-btn').addEventListener('click',()=>{
+    const json=document.getElementById('load-paste').value.trim();
+    if(!json){toast('データを貼り付けてください');return;}
+    loadFromJSON(json,'貼り付けデータ');
+    m.remove();
+  });
+  document.getElementById('load-file-btn').addEventListener('click',()=>{
+    m.remove();
+    document.getElementById('fin-proj').click();
+  });
+  document.getElementById('load-close-btn').addEventListener('click',()=>m.remove());
+  m.addEventListener('click',e=>{if(e.target===m)m.remove()});
+  // auto-focus textarea
+  setTimeout(()=>document.getElementById('load-paste')?.focus(),300);
+}
 
 /* ========== TOOLBAR ========== */
 document.getElementById('btn-pdf').addEventListener('click',()=>document.getElementById('fin-pdf').click());
