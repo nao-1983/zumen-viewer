@@ -74,11 +74,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
 #dz{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:14px;
-  background:var(--surface2);z-index:5;
+  background:var(--surface2);z-index:5;touch-action:auto;
 }
 #dz svg{opacity:.25}
 #dz p{font-size:16px;color:var(--text2);font-weight:500}
 #dz small{font-size:13px;color:var(--text3)}
+#dz .btn{touch-action:auto;pointer-events:auto}
 
 /* SIDEBAR */
 #sb{
@@ -433,11 +434,23 @@ function createPinEl(sym){
   const lbl=document.createElement('div'); lbl.className='plabel'; lbl.textContent=sym.name||'未設定';
   const dd=buildDD(sym);
 
+  // iPad: touchend directly on dot (parent cw uses preventDefault so 'click' never fires on iOS)
+  let dotTouchMoved=false;
+  dot.addEventListener('touchstart',e=>{e.stopPropagation();dotTouchMoved=false;},{passive:true});
+  dot.addEventListener('touchmove',()=>{dotTouchMoved=true;},{passive:true});
+  dot.addEventListener('touchend',e=>{
+    e.stopPropagation();e.preventDefault();
+    if(dotTouchMoved)return;
+    const was=el.classList.contains('open');
+    closeDDs();
+    if(!was){el.classList.add('open');el.classList.add('showlabel');}
+  },{passive:false});
+  // desktop fallback
   dot.addEventListener('click',e=>{
     e.stopPropagation();
     const was=el.classList.contains('open');
     closeDDs();
-    if(!was){el.classList.add('open');el.classList.add('showlabel')}
+    if(!was){el.classList.add('open');el.classList.add('showlabel');}
   });
 
   el.appendChild(dot); el.appendChild(lbl); el.appendChild(dd);
@@ -456,6 +469,10 @@ function buildDD(sym){
     sym.files.forEach(f=>{
       const it=document.createElement('div'); it.className='ddi';
       it.innerHTML=`<span class="ddi-icon">${ficon(f.mime)}</span><span class="ddi-name">${esc(f.name)}</span>`;
+      let itMoved=false;
+      it.addEventListener('touchstart',e=>{e.stopPropagation();itMoved=false;},{passive:true});
+      it.addEventListener('touchmove',()=>{itMoved=true;},{passive:true});
+      it.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();if(!itMoved){openFov(f);closeDDs();}},{passive:false});
       it.addEventListener('click',e=>{e.stopPropagation();openFov(f);closeDDs()});
       dd.appendChild(it);
     });
@@ -465,6 +482,10 @@ function buildDD(sym){
 
   const ed=document.createElement('div'); ed.className='ddedit';
   ed.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>編集 / ファイル追加`;
+  let edMoved=false;
+  ed.addEventListener('touchstart',e=>{e.stopPropagation();edMoved=false;},{passive:true});
+  ed.addEventListener('touchmove',()=>{edMoved=true;},{passive:true});
+  ed.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();if(!edMoved){openEdit(sym.id);closeDDs();}},{passive:false});
   ed.addEventListener('click',e=>{e.stopPropagation();openEdit(sym.id);closeDDs()});
   dd.appendChild(ed);
   return dd;
@@ -539,7 +560,7 @@ cw.addEventListener('touchmove',e=>{
     const dx=ts[0].clientX-gesture.lastX;
     const dy=ts[0].clientY-gesture.lastY;
     const totalMoved=Math.hypot(ts[0].clientX-gesture.startX,ts[0].clientY-gesture.startY);
-    if(totalMoved>6) gesture.moved=true;
+    if(totalMoved>10) gesture.moved=true;
     if(gesture.moved){
       gesture.type='pan';
       panX+=dx; panY+=dy;
@@ -742,21 +763,75 @@ document.getElementById('fov-x').addEventListener('click',()=>{
 });
 
 /* ========== SAVE / LOAD PROJECT ========== */
-document.getElementById('btn-save').addEventListener('click',()=>{
+function doSave(){
   if(symbols.length===0){toast('シンボルがありません');return;}
   const data={version:2,pdfFileName,symbols:symbols.map(s=>({
     id:s.id,name:s.name,type:s.type,memo:s.memo,
     x:s.x,y:s.y,pageNum:s.pageNum,
     files:s.files.map(f=>({name:f.name,mime:f.mime,dataURL:f.dataURL}))
   }))};
-  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
+  const json=JSON.stringify(data);
   const fname=(pdfFileName.replace(/\.pdf$/i,'')||'zumen')+'.zumen';
-  a.href=url; a.download=fname; a.click();
-  URL.revokeObjectURL(url);
-  toast(`「${fname}」として保存しました`);
-});
+  const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
+  if(isIOS){
+    // iOS Safari: open as text in new tab with instructions
+    const blob=new Blob([json],{type:'text/plain;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    // Show save modal instead
+    showSaveModal(json,fname);
+    URL.revokeObjectURL(url);
+  } else {
+    const blob=new Blob([json],{type:'application/octet-stream'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast(`「${fname}」として保存しました`);
+  }
+}
+
+function showSaveModal(json,fname){
+  // Create a modal with copy button for iOS
+  const existing=document.getElementById('save-modal');
+  if(existing) existing.remove();
+  const m=document.createElement('div');
+  m.id='save-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:flex-end;justify-content:center;';
+  m.innerHTML=`
+    <div style="background:var(--surface);width:100%;max-width:540px;border-radius:16px 16px 0 0;padding:20px;max-height:80vh;display:flex;flex-direction:column;gap:12px;">
+      <div style="font-size:15px;font-weight:600;">プロジェクトを保存</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6;">
+        iPadではファイルを直接ダウンロードできません。<br>
+        以下の手順で保存してください：<br>
+        ① 下の「コピー」ボタンをタップ<br>
+        ② メモ帳などに貼り付け<br>
+        ③ <b>${fname}</b> というファイル名で保存<br>
+        ④ 次回は「読込」ボタンで読み込み
+      </div>
+      <textarea id="save-json" readonly style="width:100%;height:100px;font-size:11px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-family:monospace;resize:none;">${json.replace(/</g,'&lt;')}</textarea>
+      <div style="display:flex;gap:8px;">
+        <button id="save-copy-btn" style="flex:1;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font)">コピー</button>
+        <button id="save-close-btn" style="padding:12px 18px;border:1px solid var(--border2);background:none;color:var(--text);border-radius:10px;font-size:15px;cursor:pointer;font-family:var(--font)">閉じる</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  const ta=document.getElementById('save-json');
+  ta.value=json;
+  document.getElementById('save-copy-btn').addEventListener('click',()=>{
+    ta.select();
+    try{
+      navigator.clipboard.writeText(json).then(()=>toast('コピーしました')).catch(()=>{
+        document.execCommand('copy');toast('コピーしました');
+      });
+    }catch(e){document.execCommand('copy');toast('コピーしました');}
+  });
+  document.getElementById('save-close-btn').addEventListener('click',()=>m.remove());
+  m.addEventListener('click',e=>{if(e.target===m)m.remove()});
+}
+
+document.getElementById('btn-save').addEventListener('click',doSave);
 
 document.getElementById('btn-load').addEventListener('click',()=>document.getElementById('fin-proj').click());
 document.getElementById('fin-proj').addEventListener('change',async e=>{
@@ -777,6 +852,15 @@ document.getElementById('fin-proj').addEventListener('change',async e=>{
 /* ========== TOOLBAR ========== */
 document.getElementById('btn-pdf').addEventListener('click',()=>document.getElementById('fin-pdf').click());
 document.getElementById('btn-pdf2').addEventListener('click',()=>document.getElementById('fin-pdf').click());
+// iPad: btn-pdf2 inside #dz needs direct touch handling
+document.getElementById('btn-pdf2').addEventListener('touchend',e=>{
+  e.preventDefault();e.stopPropagation();
+  document.getElementById('fin-pdf').click();
+},{passive:false});
+document.getElementById('btn-pdf').addEventListener('touchend',e=>{
+  e.preventDefault();e.stopPropagation();
+  document.getElementById('fin-pdf').click();
+},{passive:false});
 document.getElementById('fin-pdf').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadPDF(f);e.target.value='';});
 
 document.getElementById('btn-place').addEventListener('click',()=>{
