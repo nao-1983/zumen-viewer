@@ -2,425 +2,297 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="図面ビューワー">
 <title>図面シンボルビューワー</title>
 <style>
 :root{
-  --bg:#F7F6F2;
-  --surface:#FFFFFF;
-  --surface2:#F0EFE9;
-  --border:#E0DED6;
-  --border2:#C8C6BC;
-  --text:#1C1B18;
-  --text2:#6B6960;
-  --text3:#9B9A92;
-  --accent:#C0392B;
-  --accent-bg:#FDECEA;
-  --accent-text:#8B2219;
-  --info:#1A5F9E;
-  --info-bg:#E8F0FB;
-  --info-text:#1A5F9E;
-  --success:#1A7A3C;
-  --warn:#8B6000;
-  --warn-bg:#FFF8E1;
-  --radius:10px;
-  --radius-lg:14px;
-  --font:'Helvetica Neue',Helvetica,'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
-  --sb-width:240px;
+  --bg:#F5F4F0;--surface:#FFFFFF;--surface2:#EEECEA;
+  --border:#DDDBD3;--border2:#C0BDB5;
+  --text:#1C1B18;--text2:#6B6960;--text3:#9B9A92;
+  --accent:#C0392B;--accent-bg:#FDECEA;--accent-text:#8B2219;
+  --info:#1A5F9E;--info-bg:#E8F0FB;--info-text:#1A5F9E;
+  --green:#1A7A3C;--green-bg:#E6F4EC;
+  --radius:10px;--radius-lg:16px;
+  --font:'Helvetica Neue',Helvetica,'Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;
 }
-@media (prefers-color-scheme:dark){
-  :root{
-    --bg:#1A1916;--surface:#242320;--surface2:#2E2D29;
-    --border:#3A3934;--border2:#4A4940;
-    --text:#F0EFE9;--text2:#9B9A92;--text3:#5A5950;
-    --accent:#E05A4A;--accent-bg:#3A1A16;--accent-text:#F0A090;
-    --info:#4A90D9;--info-bg:#162030;--info-text:#7ABAFF;
-  }
-}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1A1916;--surface:#242320;--surface2:#2E2D29;
+  --border:#3A3934;--border2:#525048;
+  --text:#F0EFE9;--text2:#9B9A92;--text3:#5A5950;
+  --accent:#E05A4A;--accent-bg:#3A1A16;--accent-text:#F0A090;
+  --info:#4A90D9;--info-bg:#162030;--info-text:#7ABAFF;
+  --green:#2A9A4C;--green-bg:#0E2A18;
+}}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text);font-size:15px}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text);font-size:15px;touch-action:none}
 
-/* ===== LAYOUT ===== */
 #app{display:flex;flex-direction:column;height:100dvh;height:100vh}
+
+/* TOOLBAR */
 #toolbar{
-  display:flex;align-items:center;gap:8px;
-  padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));
+  display:flex;align-items:center;gap:6px;flex-shrink:0;
+  padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));
   background:var(--surface);border-bottom:1px solid var(--border);
-  flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
 }
-#toolbar h1{font-size:15px;font-weight:600;white-space:nowrap;margin-right:4px}
+#toolbar::-webkit-scrollbar{display:none}
+#toolbar h1{font-size:14px;font-weight:700;white-space:nowrap;letter-spacing:-.3px;flex-shrink:0}
+.sep{width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 2px}
+.btn{
+  font-size:12px;padding:6px 10px;border:1px solid var(--border2);
+  background:var(--surface);color:var(--text);border-radius:8px;
+  cursor:pointer;white-space:nowrap;flex-shrink:0;
+  min-height:34px;display:flex;align-items:center;gap:4px;
+  -webkit-user-select:none;user-select:none;font-family:var(--font)
+}
+.btn:active{background:var(--surface2);transform:scale(.96)}
+.btn.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.btn.green{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+.pinfo{font-size:12px;color:var(--text2);min-width:46px;text-align:center;white-space:nowrap;flex-shrink:0}
+
+/* MAIN */
 #main{display:flex;flex:1;overflow:hidden;position:relative}
 
-/* ===== CANVAS AREA ===== */
-#canvas-wrap{
-  flex:1;position:relative;overflow:scroll;
-  -webkit-overflow-scrolling:touch;
-  background:#888;
-  touch-action:pan-x pan-y
+/* CANVAS WRAP — handles scroll when not pinching */
+#cw{
+  flex:1;position:relative;overflow:hidden;background:#777;
+  touch-action:none;/* we handle all touch manually */
 }
-#canvas-wrap.placing{touch-action:none}
-#pdf-canvas{display:none;position:absolute;top:0;left:0}
 
-/* ===== DROP ZONE ===== */
-#drop-zone{
+/* PDF canvas inside a scalable container */
+#cv-container{
+  position:absolute;top:0;left:0;
+  transform-origin:0 0;
+  will-change:transform;
+}
+#pdf-canvas{display:block}
+
+/* DROP ZONE */
+#dz{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:14px;
-  background:var(--surface2);
+  background:var(--surface2);z-index:5;
 }
-#drop-zone svg{opacity:.3}
-#drop-zone p{font-size:16px;color:var(--text2);font-weight:500}
-#drop-zone small{font-size:13px;color:var(--text3)}
+#dz svg{opacity:.25}
+#dz p{font-size:16px;color:var(--text2);font-weight:500}
+#dz small{font-size:13px;color:var(--text3)}
 
-/* ===== SIDEBAR ===== */
-#sidebar{
-  width:var(--sb-width);background:var(--surface);
-  border-left:1px solid var(--border);
+/* SIDEBAR */
+#sb{
+  width:230px;background:var(--surface);border-left:1px solid var(--border);
   display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;
-  transition:transform .3s ease;
+  transition:transform .28s ease;
 }
-#sidebar.hidden{transform:translateX(100%);position:absolute;right:0;top:0;bottom:0;z-index:50;box-shadow:-4px 0 20px rgba(0,0,0,.15)}
-#sb-head{
-  padding:10px 14px;font-size:12px;font-weight:600;
-  color:var(--text2);border-bottom:1px solid var(--border);
-  letter-spacing:.05em;text-transform:uppercase
-}
-#sym-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px}
-.si{
-  padding:9px 10px;border-radius:var(--radius);cursor:pointer;
-  border-bottom:1px solid var(--border);margin-bottom:2px
-}
+#sb.off{transform:translateX(100%);position:absolute;right:0;top:0;bottom:0;z-index:40;box-shadow:-6px 0 24px rgba(0,0,0,.18)}
+#sb-head{padding:10px 12px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:1px solid var(--border);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;justify-content:space-between}
+#sym-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:5px}
+.si{padding:8px 10px;border-radius:var(--radius);cursor:pointer;border-bottom:1px solid var(--border)}
 .si:last-child{border-bottom:none}
 .si:active{background:var(--surface2)}
-.si-name{font-size:13px;font-weight:500;color:var(--text)}
+.si-name{font-size:13px;font-weight:500}
 .si-sub{font-size:11px;color:var(--text2);margin-top:2px}
-.si-files{font-size:11px;color:var(--text3);margin-top:2px}
+.si-fc{font-size:11px;color:var(--text3);margin-top:1px}
 
-/* ===== STATUS BAR ===== */
+/* STATUS */
 #status{
-  padding:5px 14px;padding-bottom:max(5px,env(safe-area-inset-bottom));
-  font-size:12px;color:var(--text2);background:var(--surface);
-  border-top:1px solid var(--border);flex-shrink:0
+  padding:4px 12px;padding-bottom:max(4px,env(safe-area-inset-bottom));
+  font-size:11px;color:var(--text2);background:var(--surface);border-top:1px solid var(--border);flex-shrink:0
 }
 
-/* ===== TOOLBAR BUTTONS ===== */
-.tb-btn{
-  font-size:13px;padding:7px 12px;
-  border:1px solid var(--border2);background:var(--surface);
-  color:var(--text);border-radius:var(--radius);cursor:pointer;
-  white-space:nowrap;min-height:36px;min-width:36px;
-  display:flex;align-items:center;justify-content:center;gap:5px;
-  -webkit-user-select:none;user-select:none
-}
-.tb-btn:active{background:var(--surface2);transform:scale(.97)}
-.tb-btn.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.tb-sep{width:1px;height:22px;background:var(--border);flex-shrink:0}
-.page-info{font-size:13px;min-width:52px;text-align:center;color:var(--text2);white-space:nowrap}
-
-/* ===== PINS ===== */
-.pin{position:absolute;transform:translate(-50%,-50%);z-index:10}
-.pin-dot{
-  width:22px;height:22px;border-radius:50%;
-  background:var(--accent);border:2.5px solid #fff;
-  cursor:pointer;transition:transform .15s;
-  box-shadow:0 2px 8px rgba(0,0,0,.3);
+/* PINS — positioned in screen coords */
+.pin{position:absolute;transform:translate(-50%,-50%);z-index:20;pointer-events:auto}
+.pdot{
+  width:24px;height:24px;border-radius:50%;background:var(--accent);
+  border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);
+  cursor:pointer;transition:transform .12s;
   display:flex;align-items:center;justify-content:center
 }
-.pin-dot:active{transform:scale(1.2)}
-.pin-label-tag{
-  position:absolute;top:25px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,.72);color:#fff;font-size:11px;
-  padding:2px 7px;border-radius:5px;
-  white-space:nowrap;pointer-events:none;
-  opacity:0;transition:opacity .15s
+.pdot:active{transform:scale(1.25)}
+.plabel{
+  position:absolute;top:26px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.75);color:#fff;font-size:10px;
+  padding:2px 7px;border-radius:4px;white-space:nowrap;
+  pointer-events:none;opacity:0;transition:opacity .15s
 }
-.pin:hover .pin-label-tag,.pin.show-label .pin-label-tag{opacity:1}
-.pin.open .pin-label-tag{opacity:0}
+.pin.showlabel .plabel{opacity:1}
+.pin.open .plabel{opacity:0}
 
-/* ===== DROPDOWN ===== */
-.pin-dd{
-  position:absolute;top:28px;left:50%;transform:translateX(-50%);
+/* DROPDOWN */
+.pdd{
+  position:absolute;top:30px;left:50%;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-lg);min-width:200px;max-width:260px;
-  z-index:100;display:none;
-  box-shadow:0 8px 32px rgba(0,0,0,.2);
-  overflow:hidden
+  border-radius:var(--radius-lg);min-width:210px;max-width:280px;
+  z-index:100;display:none;overflow:hidden;
+  box-shadow:0 10px 40px rgba(0,0,0,.22)
 }
-.pin.open .pin-dd{display:block}
-.dd-head{
-  padding:9px 12px;font-size:12px;font-weight:600;
-  color:var(--text2);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:6px
-}
-.dd-name{flex:1;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dd-item{
-  display:flex;align-items:center;gap:8px;
-  padding:11px 12px;cursor:pointer;font-size:13px;
-  border-bottom:1px solid var(--border)
-}
-.dd-item:last-of-type{border-bottom:none}
-.dd-item:active{background:var(--surface2)}
-.dd-item-icon{flex-shrink:0;color:var(--text2)}
-.dd-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dd-type-badge{
-  font-size:10px;padding:1px 6px;border-radius:20px;
-  background:var(--info-bg);color:var(--info-text);
-  white-space:nowrap;flex-shrink:0
-}
-.dd-empty{padding:10px 12px;font-size:12px;color:var(--text3)}
-.dd-edit{
+.pin.open .pdd{display:block}
+.ddh{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.ddh-name{flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddbadge{font-size:10px;padding:2px 6px;border-radius:20px;background:var(--info-bg);color:var(--info-text);white-space:nowrap;flex-shrink:0}
+.ddi{display:flex;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)}
+.ddi:active{background:var(--surface2)}
+.ddi-icon{flex-shrink:0;color:var(--text2)}
+.ddi-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddempty{padding:10px 12px;font-size:12px;color:var(--text3)}
+.ddedit{
   padding:10px 12px;font-size:12px;color:var(--info);
-  background:var(--info-bg);cursor:pointer;
-  display:flex;align-items:center;gap:6px;border-top:1px solid var(--border)
+  background:var(--info-bg);cursor:pointer;display:flex;align-items:center;gap:6px;
+  border-top:1px solid var(--border)
 }
-.dd-edit:active{opacity:.7}
+.ddedit:active{opacity:.7}
 
-/* ===== MODAL OVERLAY ===== */
-#ov{
-  display:none;position:fixed;inset:0;
-  background:rgba(0,0,0,.55);z-index:200;
-  align-items:flex-end;justify-content:center;
-  padding-bottom:env(safe-area-inset-bottom)
-}
+/* MODAL */
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
 #ov.show{display:flex}
-@media(min-width:600px){
-  #ov{align-items:center}
-  #emod{border-radius:var(--radius-lg);max-height:85vh}
-}
-
-/* ===== EDIT MODAL ===== */
+@media(min-width:600px){#ov{align-items:center}#emod{border-radius:var(--radius-lg);max-height:88vh}}
 #emod{
-  background:var(--surface);width:100%;max-width:520px;
+  background:var(--surface);width:100%;max-width:540px;
   border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-  max-height:90vh;display:flex;flex-direction:column;
-  overflow:hidden
+  max-height:92vh;display:flex;flex-direction:column;overflow:hidden
 }
-.mod-handle{
-  width:36px;height:4px;background:var(--border2);
-  border-radius:2px;margin:10px auto 4px;flex-shrink:0
-}
-.mod-head{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0
-}
-.mod-title{font-size:15px;font-weight:600}
-.mod-x{
-  background:var(--surface2);border:none;cursor:pointer;
-  font-size:15px;color:var(--text2);padding:6px 10px;
-  border-radius:var(--radius);min-width:36px;min-height:36px
-}
-.mod-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
+.mhandle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:10px auto 4px;flex-shrink:0}
+.mhead{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.mtitle{font-size:15px;font-weight:600}
+.mx{background:var(--surface2);border:none;cursor:pointer;font-size:15px;color:var(--text2);padding:6px 10px;border-radius:8px;min-width:36px;min-height:36px;font-family:var(--font)}
+.mbody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
 .field{margin-bottom:14px}
-.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;letter-spacing:.04em;text-transform:uppercase}
-.field input,.field textarea,.field select{
-  width:100%;padding:10px 12px;
-  border:1px solid var(--border2);border-radius:var(--radius);
-  font-size:15px;background:var(--surface);color:var(--text);
-  font-family:var(--font);appearance:none;-webkit-appearance:none;
-  min-height:44px
+.field label{display:block;font-size:11px;font-weight:700;color:var(--text2);margin-bottom:5px;letter-spacing:.05em;text-transform:uppercase}
+.field input,.field textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:var(--radius);
+  font-size:15px;background:var(--surface);color:var(--text);font-family:var(--font);
+  -webkit-appearance:none;min-height:44px
 }
-.field input:focus,.field textarea:focus,.field select:focus{
-  outline:none;border-color:var(--info);box-shadow:0 0 0 3px var(--info-bg)
-}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--info);box-shadow:0 0 0 3px var(--info-bg)}
 .field textarea{resize:vertical;min-height:80px}
-.file-list{display:flex;flex-direction:column;gap:5px;margin-top:6px}
-.file-row{
-  display:flex;align-items:center;gap:8px;
-  padding:9px 10px;background:var(--surface2);
-  border-radius:var(--radius);font-size:13px;
-  border:1px solid var(--border)
-}
-.file-row-icon{color:var(--text2);flex-shrink:0}
-.file-row span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-del{
-  background:none;border:none;cursor:pointer;color:var(--text3);
-  font-size:18px;padding:2px 6px;min-width:32px;min-height:32px;
-  display:flex;align-items:center;justify-content:center
-}
-.file-del:active{color:var(--accent)}
-.add-file-btn{
-  display:flex;align-items:center;gap:6px;
-  font-size:13px;color:var(--info);cursor:pointer;
-  padding:10px 0;font-weight:500
-}
-.add-file-btn:active{opacity:.7}
-.mod-foot{
-  display:flex;gap:8px;padding:12px 16px;
-  padding-bottom:max(12px,env(safe-area-inset-bottom));
-  border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)
-}
-.btn-save{
-  flex:1;padding:12px;background:var(--accent);color:#fff;
-  border:none;border-radius:var(--radius);font-size:15px;
-  font-weight:600;cursor:pointer;min-height:44px
-}
-.btn-save:active{opacity:.85}
-.btn-del2{
-  padding:12px 16px;border:1px solid var(--accent);color:var(--accent);
-  background:none;border-radius:var(--radius);font-size:15px;
-  cursor:pointer;min-height:44px
-}
-.btn-del2:active{background:var(--accent-bg)}
+.flist{display:flex;flex-direction:column;gap:5px;margin-top:6px}
+.frow{display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--surface2);border-radius:var(--radius);font-size:13px;border:1px solid var(--border)}
+.frow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fdel{background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;padding:2px 6px;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;font-family:var(--font)}
+.fdel:active{color:var(--accent)}
+.addfile{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--info);cursor:pointer;padding:10px 0;font-weight:500}
+.addfile:active{opacity:.7}
+.mfoot{display:flex;gap:8px;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)}
+.bsave{flex:1;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;min-height:44px;font-family:var(--font)}
+.bsave:active{opacity:.85}
+.bdel{padding:12px 14px;border:1px solid var(--accent);color:var(--accent);background:none;border-radius:var(--radius);font-size:15px;cursor:pointer;min-height:44px;font-family:var(--font)}
+.bdel:active{background:var(--accent-bg)}
 
-/* ===== FILE VIEWER ===== */
-#fov{
-  display:none;position:fixed;inset:0;
-  background:rgba(0,0,0,.92);z-index:300;
-  flex-direction:column
-}
+/* FILE VIEWER */
+#fov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:300;flex-direction:column}
 #fov.show{display:flex}
-#fov-bar{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));
-  flex-shrink:0
-}
-#fov-fname{font-size:14px;color:#fff;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#fov-x{
-  background:rgba(255,255,255,.15);border:none;color:#fff;
-  border-radius:var(--radius);padding:8px 14px;font-size:14px;
-  cursor:pointer;min-height:40px;white-space:nowrap
-}
+#fov-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));flex-shrink:0}
+#fov-name{font-size:14px;color:#fff;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fov-x{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer;min-height:40px;white-space:nowrap;font-family:var(--font)}
 #fov-x:active{background:rgba(255,255,255,.3)}
-#fov-content{
-  flex:1;display:flex;align-items:center;justify-content:center;
-  overflow:hidden;padding:8px
-}
-#fov-img{
-  max-width:100%;max-height:100%;object-fit:contain;
-  border-radius:8px;display:none
-}
-#fov-pdf-wrap{width:100%;height:100%;display:none}
+#fov-body{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px}
+#fov-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;display:none}
+#fov-pdfw{width:100%;height:100%;display:none}
 #fov-iframe{width:100%;height:100%;border:none;border-radius:8px}
-#fov-nopreview{
-  text-align:center;color:rgba(255,255,255,.6);font-size:14px;
-  display:none;line-height:1.7
-}
+#fov-msg{text-align:center;color:rgba(255,255,255,.6);font-size:14px;line-height:1.8;display:none}
 
-/* ===== LONG PRESS INDICATOR ===== */
-.lp-ring{
-  position:absolute;pointer-events:none;z-index:5;
-  width:40px;height:40px;border-radius:50%;
-  border:2px solid var(--accent);transform:translate(-50%,-50%) scale(0);
-  transition:transform .5s ease,opacity .3s;opacity:0
-}
-.lp-ring.active{transform:translate(-50%,-50%) scale(1);opacity:1}
-
-/* ===== PINCH ZOOM HINT ===== */
-#zoom-hint{
-  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,.65);color:#fff;font-size:12px;
-  padding:5px 12px;border-radius:20px;pointer-events:none;
-  opacity:0;transition:opacity .4s;z-index:20
-}
-#zoom-hint.show{opacity:1}
-
-/* ===== TOAST ===== */
+/* TOAST */
 #toast{
-  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
-  background:rgba(28,27,24,.9);color:#fff;font-size:13px;
-  padding:8px 16px;border-radius:20px;z-index:400;
+  position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
+  background:rgba(20,20,18,.92);color:#fff;font-size:13px;
+  padding:9px 18px;border-radius:20px;z-index:500;
   opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap
 }
 #toast.show{opacity:1}
 
-/* Scrollbar */
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+/* ZOOM INDICATOR */
+#zindicator{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.6);color:#fff;font-size:13px;font-weight:600;
+  padding:5px 14px;border-radius:20px;pointer-events:none;
+  opacity:0;transition:opacity .3s;z-index:30
+}
+#zindicator.show{opacity:1}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 </style>
 </head>
 <body>
-
 <div id="app">
-  <!-- TOOLBAR -->
   <div id="toolbar">
     <h1>📐 図面ビューワー</h1>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-pdf">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      PDF
+    <div class="sep"></div>
+    <button class="btn" id="btn-pdf">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF
     </button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn on" id="btn-place">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
-      配置
+    <div class="sep"></div>
+    <button class="btn on" id="btn-place">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>配置
     </button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-prev">‹</button>
-    <span class="page-info" id="pinfo">1 / 1</span>
-    <button class="tb-btn" id="btn-next">›</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-zoom-in">＋</button>
-    <span class="page-info" id="zoom-label">100%</span>
-    <button class="tb-btn" id="btn-zoom-out">－</button>
-    <div class="tb-sep"></div>
-    <button class="tb-btn" id="btn-list">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      一覧
+    <div class="sep"></div>
+    <button class="btn" id="btn-prev">‹</button>
+    <span class="pinfo" id="pinfo">1 / 1</span>
+    <button class="btn" id="btn-next">›</button>
+    <div class="sep"></div>
+    <button class="btn" id="btn-zi">＋</button>
+    <span class="pinfo" id="zlabel">100%</span>
+    <button class="btn" id="btn-zo">－</button>
+    <button class="btn" id="btn-zfit">全体</button>
+    <div class="sep"></div>
+    <button class="btn green" id="btn-save">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存
+    </button>
+    <button class="btn" id="btn-load">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>読込
+    </button>
+    <div class="sep"></div>
+    <button class="btn" id="btn-sb">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>一覧
     </button>
   </div>
 
-  <!-- MAIN -->
   <div id="main">
-    <div id="canvas-wrap" class="placing">
-      <div id="drop-zone">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+    <div id="cw">
+      <div id="dz">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
         <p>「PDF」ボタンで図面を読み込む</p>
-        <small>対応形式: PDF</small>
-        <button class="tb-btn" style="margin-top:8px;padding:10px 20px;font-size:14px" id="btn-pdf2">PDFを選択</button>
+        <small>読み込み後、シンボル位置をタップして登録</small>
+        <button class="btn" id="btn-pdf2" style="margin-top:8px;padding:10px 22px;font-size:14px">PDFを選択</button>
       </div>
-      <canvas id="pdf-canvas"></canvas>
-      <div id="zoom-hint">ピンチでズーム / 2本指でスクロール</div>
+      <div id="cv-container"><canvas id="pdf-canvas"></canvas></div>
+      <div id="zindicator"></div>
     </div>
-
-    <div id="sidebar" class="hidden">
+    <div id="sb" class="off">
       <div id="sb-head">
-        シンボル一覧
-        <span id="sym-count" style="font-weight:400;color:var(--text3);margin-left:4px">(0)</span>
+        シンボル一覧<span id="scnt" style="font-weight:400;color:var(--text3);margin-left:4px">(0)</span>
       </div>
       <div id="sym-list"></div>
     </div>
   </div>
-
-  <div id="status">PDFを開いて、シンボル位置をタップして登録してください</div>
+  <div id="status">PDFを開いてシンボル位置をタップしてください</div>
 </div>
 
 <!-- EDIT MODAL -->
 <div id="ov">
   <div id="emod">
-    <div class="mod-handle"></div>
-    <div class="mod-head">
-      <span class="mod-title" id="emod-title">シンボル編集</span>
-      <button class="mod-x" id="emod-x">✕</button>
+    <div class="mhandle"></div>
+    <div class="mhead">
+      <span class="mtitle" id="etitle">シンボル編集</span>
+      <button class="mx" id="emx">✕</button>
     </div>
-    <div class="mod-body">
-      <div class="field">
-        <label>機器名・シンボル名</label>
-        <input type="text" id="f-name" placeholder="例: 電磁弁 MV-101" autocomplete="off">
-      </div>
-      <div class="field">
-        <label>種別</label>
-        <input type="text" id="f-type" placeholder="例: 電気機器 / 計器 / バルブ" autocomplete="off">
-      </div>
-      <div class="field">
-        <label>仕様・メモ</label>
-        <textarea id="f-memo" placeholder="仕様・型番・結線情報・備考など"></textarea>
-      </div>
+    <div class="mbody">
+      <div class="field"><label>機器名・シンボル名</label><input type="text" id="fn" placeholder="例: 電磁弁 MV-101" autocomplete="off"></div>
+      <div class="field"><label>種別</label><input type="text" id="ft" placeholder="例: 電気機器 / 計器 / バルブ" autocomplete="off"></div>
+      <div class="field"><label>仕様・メモ</label><textarea id="fm" placeholder="仕様・型番・結線情報・備考など"></textarea></div>
       <div class="field">
         <label>添付ファイル（写真・結線図・PDFなど）</label>
-        <div class="file-list" id="f-files"></div>
-        <div class="add-file-btn" id="add-file-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          ファイルを追加
+        <div class="flist" id="ffiles"></div>
+        <div class="addfile" id="addfile">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>ファイルを追加
         </div>
-        <input type="file" id="fin-attach" multiple accept="image/*,application/pdf" style="display:none">
+        <input type="file" id="fattach" multiple accept="image/*,application/pdf" style="display:none">
       </div>
     </div>
-    <div class="mod-foot">
-      <button class="btn-del2" id="emod-del">削除</button>
-      <button class="btn-save" id="emod-save">保存して閉じる</button>
+    <div class="mfoot">
+      <button class="bdel" id="emdel">削除</button>
+      <button class="bsave" id="emsave">保存して閉じる</button>
     </div>
   </div>
 </div>
@@ -428,359 +300,438 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
 <!-- FILE VIEWER -->
 <div id="fov">
   <div id="fov-bar">
-    <span id="fov-fname"></span>
+    <span id="fov-name"></span>
     <button id="fov-x">閉じる ✕</button>
   </div>
-  <div id="fov-content">
+  <div id="fov-body">
     <img id="fov-img" alt="プレビュー">
-    <div id="fov-pdf-wrap"><iframe id="fov-iframe" title="PDF"></iframe></div>
-    <div id="fov-nopreview">このファイル形式はプレビューできません<br><small>ダウンロードしてご確認ください</small></div>
+    <div id="fov-pdfw"><iframe id="fov-iframe" title="PDF"></iframe></div>
+    <div id="fov-msg"></div>
   </div>
 </div>
 
 <div id="toast"></div>
-
 <input type="file" id="fin-pdf" accept="application/pdf" style="display:none">
+<input type="file" id="fin-proj" accept=".zumen,.json" style="display:none">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 'use strict';
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-/* ===== STATE ===== */
-let pdfDoc=null, curPage=1, totalPages=1, scale=1.0;
+/* ========== STATE ========== */
+let pdfDoc=null, curPage=1, totalPages=1;
+let scale=1.0, minScale=0.3, maxScale=6.0;
+let panX=0, panY=0;           // current pan offset
 let placing=true;
-let symbols=[];   // {id,name,type,memo,files:[{name,dataURL,mime}],x,y,pageNum,el}
-let editId=null, editingFiles=[];
-let sidebarOpen=false;
+let symbols=[];
+let editId=null, editFiles=[];
+let sbOpen=false;
+let pdfFileName='';
 
-/* ===== ELEMENTS ===== */
+/* ========== ELEMENTS ========== */
+const cw=document.getElementById('cw');
+const cvc=document.getElementById('cv-container');
 const canvas=document.getElementById('pdf-canvas');
 const ctx=canvas.getContext('2d');
-const wrap=document.getElementById('canvas-wrap');
-const dz=document.getElementById('drop-zone');
+const dz=document.getElementById('dz');
 const statusEl=document.getElementById('status');
-const sidebar=document.getElementById('sidebar');
 
-/* ===== TOAST ===== */
-let toastTimer;
-function toast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+/* ========== TOAST ========== */
+let toastT;
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2400)}
+function st(m){statusEl.textContent=m}
+
+/* ========== ZOOM INDICATOR ========== */
+let zindT;
+function showZind(){
+  const el=document.getElementById('zindicator');
+  el.textContent=Math.round(scale*100)+'%';
+  el.classList.add('show');
+  clearTimeout(zindT);
+  zindT=setTimeout(()=>el.classList.remove('show'),1200);
+  document.getElementById('zlabel').textContent=Math.round(scale*100)+'%';
 }
-function setStatus(t){statusEl.textContent=t}
 
-/* ===== PDF LOAD ===== */
+/* ========== TRANSFORM ========== */
+function applyTransform(){
+  cvc.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;
+  // reposition all pins
+  document.querySelectorAll('.pin').forEach(el=>{
+    const id=el.dataset.id;
+    const s=symbols.find(x=>x.id===id);
+    if(s) positionPin(el,s.x,s.y);
+  });
+}
+
+function positionPin(el,cx,cy){
+  // cx,cy are canvas-pixel coords; convert to screen coords in cw
+  el.style.left=(cx*scale+panX)+'px';
+  el.style.top=(cy*scale+panY)+'px';
+}
+
+function clampPan(){
+  // allow some overscroll so canvas can be scrolled to any part
+  const W=cw.clientWidth, H=cw.clientHeight;
+  const cW=canvas.width*scale, cH=canvas.height*scale;
+  const mx=Math.max(0,(cW-W)*0.5+W*0.1);
+  const my=Math.max(0,(cH-H)*0.5+H*0.1);
+  panX=Math.min(mx,Math.max(-mx+(W-cW>0?W-cW:0),panX));
+  panY=Math.min(my,Math.max(-my+(H-cH>0?H-cH:0),panY));
+}
+
+function fitPage(){
+  const W=cw.clientWidth, H=cw.clientHeight;
+  if(!canvas.width||!canvas.height) return;
+  scale=Math.min(W/canvas.width,H/canvas.height)*0.96;
+  scale=Math.max(minScale,Math.min(maxScale,scale));
+  panX=(W-canvas.width*scale)/2;
+  panY=(H-canvas.height*scale)/2;
+  applyTransform();
+  showZind();
+}
+
+/* ========== PDF ========== */
 async function loadPDF(file){
   try{
+    pdfFileName=file.name;
     const ab=await file.arrayBuffer();
     pdfDoc=await pdfjsLib.getDocument({data:ab}).promise;
     totalPages=pdfDoc.numPages; curPage=1;
-    canvas.style.display='block'; dz.style.display='none';
-    await renderPage();
-    setStatus(`「${file.name}」読み込み完了 — シンボル位置をタップして登録`);
-    showZoomHint();
+    dz.style.display='none';
+    await renderPage(true);
+    st(`「${file.name}」読込完了 — シンボル位置をタップして登録`);
   }catch(e){toast('PDFの読み込みに失敗しました');console.error(e)}
 }
 
-function showZoomHint(){
-  const h=document.getElementById('zoom-hint');
-  h.classList.add('show');
-  setTimeout(()=>h.classList.remove('show'),3000);
-}
-
-async function renderPage(){
+async function renderPage(fit=false){
+  if(!pdfDoc) return;
   const pg=await pdfDoc.getPage(curPage);
-  const vp=pg.getViewport({scale});
-  canvas.width=vp.width; canvas.height=vp.height;
-  canvas.style.width=vp.width+'px'; canvas.style.height=vp.height+'px';
-  await pg.render({canvasContext:ctx,viewport:vp}).promise;
+  // render at 2x for retina; scale via CSS transform
+  const baseVP=pg.getViewport({scale:2});
+  canvas.width=baseVP.width; canvas.height=baseVP.height;
+  canvas.style.width=baseVP.width+'px'; canvas.style.height=baseVP.height+'px';
+  await pg.render({canvasContext:ctx,viewport:baseVP}).promise;
   document.getElementById('pinfo').textContent=`${curPage} / ${totalPages}`;
-  document.getElementById('zoom-label').textContent=Math.round(scale*100)+'%';
+  if(fit) fitPage(); else applyTransform();
   renderAllPins();
 }
 
-/* ===== PINS ===== */
+/* ========== PINS ========== */
 function renderAllPins(){
   document.querySelectorAll('.pin').forEach(e=>e.remove());
-  symbols.filter(s=>s.pageNum===curPage).forEach(sym=>createPinEl(sym));
+  symbols.filter(s=>s.pageNum===curPage).forEach(createPinEl);
 }
 
 function createPinEl(sym){
   const el=document.createElement('div');
   el.className='pin';
   el.dataset.id=sym.id;
-  el.style.left=sym.x+'px';
-  el.style.top=sym.y+'px';
+  positionPin(el,sym.x,sym.y);
 
-  const dot=document.createElement('div');
-  dot.className='pin-dot';
-  dot.setAttribute('role','button');
-  dot.setAttribute('aria-label',sym.name||'シンボル');
+  const dot=document.createElement('div'); dot.className='pdot';
+  const lbl=document.createElement('div'); lbl.className='plabel'; lbl.textContent=sym.name||'未設定';
+  const dd=buildDD(sym);
 
-  const ltag=document.createElement('div');
-  ltag.className='pin-label-tag';
-  ltag.textContent=sym.name||'未設定';
-
-  const dd=document.createElement('div');
-  dd.className='pin-dd';
-
-  // header
-  const ddh=document.createElement('div');
-  ddh.className='dd-head';
-  const nm=document.createElement('span');
-  nm.className='dd-name';
-  nm.textContent=sym.name||'未設定';
-  ddh.appendChild(nm);
-  if(sym.type){
-    const badge=document.createElement('span');
-    badge.className='dd-type-badge';
-    badge.textContent=sym.type;
-    ddh.appendChild(badge);
-  }
-  dd.appendChild(ddh);
-
-  // file items
-  if(sym.files&&sym.files.length>0){
-    sym.files.forEach(f=>{
-      const item=document.createElement('div');
-      item.className='dd-item';
-      item.innerHTML=`<span class="dd-item-icon">${fileIconSVG(f.mime)}</span><span class="dd-item-name">${esc(f.name)}</span>`;
-      item.addEventListener('click',e=>{e.stopPropagation();openFileViewer(f);closeDDs()});
-      dd.appendChild(item);
-    });
-  } else {
-    const emp=document.createElement('div');
-    emp.className='dd-empty';
-    emp.textContent='ファイル未登録';
-    dd.appendChild(emp);
-  }
-
-  // edit row
-  const editRow=document.createElement('div');
-  editRow.className='dd-edit';
-  editRow.innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 編集 / ファイル追加`;
-  editRow.addEventListener('click',e=>{e.stopPropagation();openEdit(sym.id);closeDDs()});
-  dd.appendChild(editRow);
-
-  // toggle on tap
   dot.addEventListener('click',e=>{
     e.stopPropagation();
     const was=el.classList.contains('open');
     closeDDs();
-    if(!was) el.classList.add('open');
+    if(!was){el.classList.add('open');el.classList.add('showlabel')}
   });
 
-  el.appendChild(dot);
-  el.appendChild(ltag);
-  el.appendChild(dd);
-  wrap.appendChild(el);
+  el.appendChild(dot); el.appendChild(lbl); el.appendChild(dd);
+  cw.appendChild(el);
   sym.el=el;
 }
 
-function fileIconSVG(mime){
-  const s=`width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"`;
-  if(mime&&mime.startsWith('image')) return `<svg ${s}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21 15 16 10 5 21"/></svg>`;
-  if(mime==='application/pdf') return `<svg ${s}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`;
-  return `<svg ${s}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+function buildDD(sym){
+  const dd=document.createElement('div'); dd.className='pdd';
+  const dh=document.createElement('div'); dh.className='ddh';
+  const nm=document.createElement('span'); nm.className='ddh-name'; nm.textContent=sym.name||'未設定'; dh.appendChild(nm);
+  if(sym.type){const b=document.createElement('span');b.className='ddbadge';b.textContent=sym.type;dh.appendChild(b)}
+  dd.appendChild(dh);
+
+  if(sym.files&&sym.files.length){
+    sym.files.forEach(f=>{
+      const it=document.createElement('div'); it.className='ddi';
+      it.innerHTML=`<span class="ddi-icon">${ficon(f.mime)}</span><span class="ddi-name">${esc(f.name)}</span>`;
+      it.addEventListener('click',e=>{e.stopPropagation();openFov(f);closeDDs()});
+      dd.appendChild(it);
+    });
+  } else {
+    const em=document.createElement('div'); em.className='ddempty'; em.textContent='ファイル未登録'; dd.appendChild(em);
+  }
+
+  const ed=document.createElement('div'); ed.className='ddedit';
+  ed.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>編集 / ファイル追加`;
+  ed.addEventListener('click',e=>{e.stopPropagation();openEdit(sym.id);closeDDs()});
+  dd.appendChild(ed);
+  return dd;
+}
+
+function ficon(mime){
+  const a=`width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"`;
+  if(mime&&mime.startsWith('image')) return `<svg ${a}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21 15 16 10 5 21"/></svg>`;
+  if(mime==='application/pdf') return `<svg ${a}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`;
+  return `<svg ${a}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 }
 
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function closeDDs(){document.querySelectorAll('.pin.open').forEach(e=>{e.classList.remove('open');e.classList.remove('showlabel')})}
+document.addEventListener('click',closeDDs);
 
-function closeDDs(){
-  document.querySelectorAll('.pin.open').forEach(e=>e.classList.remove('open'));
+/* ========== TOUCH HANDLING ========== */
+// Unified touch handler for: pan, pinch-zoom, tap-to-place
+let touches={};
+let gesture={type:null}; // 'pan','pinch','tap'
+let tapTimer=null;
+
+function getTwoFingerMid(t1,t2){
+  return{x:(t1.clientX+t2.clientX)/2,y:(t1.clientY+t2.clientY)/2};
 }
-document.addEventListener('click',()=>closeDDs());
+function dist2(t1,t2){
+  return Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);
+}
 
-/* ===== PLACE ON CANVAS TAP ===== */
-// Use touchend for iPad precision
-let touchStarted=false, touchMoved=false, tStartX, tStartY;
+cw.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const ts=Array.from(e.touches);
 
-wrap.addEventListener('touchstart',e=>{
-  if(!placing||!pdfDoc) return;
-  const t=e.touches[0];
-  tStartX=t.clientX; tStartY=t.clientY;
-  touchStarted=true; touchMoved=false;
-},{passive:true});
+  if(ts.length===1){
+    gesture={
+      type:'pending',
+      startX:ts[0].clientX, startY:ts[0].clientY,
+      lastX:ts[0].clientX, lastY:ts[0].clientY,
+      moved:false, target:e.target
+    };
+  } else if(ts.length===2){
+    closeDDs();
+    gesture={
+      type:'pinch',
+      startDist:dist2(ts[0],ts[1]),
+      startScale:scale,
+      startMid:getTwoFingerMid(ts[0],ts[1]),
+      startPanX:panX, startPanY:panY
+    };
+  }
+},{passive:false});
 
-wrap.addEventListener('touchmove',()=>{
-  if(Math.abs(event.touches[0].clientX-tStartX)>6||Math.abs(event.touches[0].clientY-tStartY)>6)
-    touchMoved=true;
-},{passive:true});
+cw.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const ts=Array.from(e.touches);
 
-wrap.addEventListener('touchend',e=>{
-  if(!placing||!pdfDoc||touchMoved||!touchStarted) return;
-  touchStarted=false;
-  // ignore if tapped on a pin
-  if(e.target.closest('.pin')) return;
-  const t=e.changedTouches[0];
-  const r=canvas.getBoundingClientRect();
-  const x=t.clientX-r.left;
-  const y=t.clientY-r.top;
-  if(x<0||y<0||x>canvas.width||y>canvas.height) return;
-  placeSymbol(x,y);
-},{passive:true});
+  if(gesture.type==='pinch'&&ts.length>=2){
+    const d=dist2(ts[0],ts[1]);
+    const newScale=Math.min(maxScale,Math.max(minScale,gesture.startScale*(d/gesture.startDist)));
+    const mid=getTwoFingerMid(ts[0],ts[1]);
+    // zoom around pinch midpoint
+    const ratio=newScale/scale;
+    panX=mid.x-(mid.x-panX)*ratio+(mid.x-gesture.startMid.x);
+    panY=mid.y-(mid.y-panY)*ratio+(mid.y-gesture.startMid.y);
+    scale=newScale;
+    applyTransform();
+    showZind();
+    return;
+  }
 
-// Also support mouse click for desktop/simulator
-canvas.addEventListener('click',e=>{
-  if(!placing||!pdfDoc) return;
-  if(e.target.closest('.pin')) return;
-  const r=canvas.getBoundingClientRect();
-  placeSymbol(e.clientX-r.left,e.clientY-r.top);
+  if((gesture.type==='pending'||gesture.type==='pan')&&ts.length===1){
+    const dx=ts[0].clientX-gesture.lastX;
+    const dy=ts[0].clientY-gesture.lastY;
+    const totalMoved=Math.hypot(ts[0].clientX-gesture.startX,ts[0].clientY-gesture.startY);
+    if(totalMoved>6) gesture.moved=true;
+    if(gesture.moved){
+      gesture.type='pan';
+      panX+=dx; panY+=dy;
+      applyTransform();
+    }
+    gesture.lastX=ts[0].clientX;
+    gesture.lastY=ts[0].clientY;
+  }
+},{passive:false});
+
+cw.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(gesture.type==='pending'&&!gesture.moved){
+    // TAP
+    if(gesture.target.closest('.pin')) return;
+    if(!pdfDoc||!placing) return;
+    const r=cw.getBoundingClientRect();
+    const screenX=gesture.startX-r.left;
+    const screenY=gesture.startY-r.top;
+    // convert screen coords to canvas coords
+    const cx=(screenX-panX)/scale;
+    const cy=(screenY-panY)/scale;
+    if(cx<0||cy<0||cx>canvas.width||cy>canvas.height) return;
+    placeSymbol(cx,cy);
+  }
+  if(gesture.type==='pinch'&&e.touches.length<2){
+    // snap scale to render
+    renderPage(false);
+  }
+  if(e.touches.length===0) gesture={type:null};
+},{passive:false});
+
+/* Mouse fallback (desktop) */
+let mouseDown=false, mouseMoved=false, mouseStartX, mouseStartY, mouseLastX, mouseLastY;
+cw.addEventListener('mousedown',e=>{
+  if(e.button!==0) return;
+  mouseDown=true; mouseMoved=false;
+  mouseStartX=mouseLastX=e.clientX; mouseStartY=mouseLastY=e.clientY;
 });
+window.addEventListener('mousemove',e=>{
+  if(!mouseDown) return;
+  const dx=e.clientX-mouseLastX, dy=e.clientY-mouseLastY;
+  if(Math.hypot(e.clientX-mouseStartX,e.clientY-mouseStartY)>4) mouseMoved=true;
+  if(mouseMoved){panX+=dx;panY+=dy;applyTransform();}
+  mouseLastX=e.clientX; mouseLastY=e.clientY;
+});
+window.addEventListener('mouseup',e=>{
+  if(!mouseDown) return;
+  mouseDown=false;
+  if(!mouseMoved&&pdfDoc&&placing&&!e.target.closest('.pin')){
+    const r=cw.getBoundingClientRect();
+    const cx=(e.clientX-r.left-panX)/scale;
+    const cy=(e.clientY-r.top-panY)/scale;
+    if(cx>=0&&cy>=0&&cx<=canvas.width&&cy<=canvas.height) placeSymbol(cx,cy);
+  }
+});
+cw.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const delta=e.deltaY<0?1.1:0.9;
+  const r=cw.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const ns=Math.min(maxScale,Math.max(minScale,scale*delta));
+  panX=mx-(mx-panX)*(ns/scale);
+  panY=my-(my-panY)*(ns/scale);
+  scale=ns; applyTransform(); showZind();
+},{passive:false});
 
-function placeSymbol(x,y){
+/* ========== PLACE SYMBOL ========== */
+function placeSymbol(cx,cy){
   const sym={id:Date.now()+'_'+Math.random().toString(36).slice(2),
-    name:'',type:'',memo:'',files:[],x,y,pageNum:curPage,el:null};
+    name:'',type:'',memo:'',files:[],x:cx,y:cy,pageNum:curPage,el:null};
   symbols.push(sym);
   createPinEl(sym);
-  updateSidebar();
+  updateSB();
   openEdit(sym.id);
-  setStatus('シンボルを配置しました — 名称・ファイルを入力してください');
+  st('シンボルを配置しました');
 }
 
-/* ===== SIDEBAR ===== */
-function updateSidebar(){
+/* ========== SIDEBAR ========== */
+function updateSB(){
   const list=document.getElementById('sym-list');
   list.innerHTML='';
-  document.getElementById('sym-count').textContent=`(${symbols.length})`;
-  const sorted=[...symbols].reverse();
-  sorted.forEach(s=>{
-    const d=document.createElement('div');
-    d.className='si';
-    d.innerHTML=`<div class="si-name">${esc(s.name)||'(未設定)'}</div><div class="si-sub">${esc(s.type)||'—'} &nbsp;P.${s.pageNum}</div><div class="si-files">${s.files.length}件のファイル</div>`;
+  document.getElementById('scnt').textContent=`(${symbols.length})`;
+  [...symbols].reverse().forEach(s=>{
+    const d=document.createElement('div'); d.className='si';
+    d.innerHTML=`<div class="si-name">${esc(s.name)||'(未設定)'}</div><div class="si-sub">${esc(s.type)||'—'} · P.${s.pageNum}</div><div class="si-fc">${s.files.length}件のファイル</div>`;
     d.addEventListener('click',()=>{
-      if(sidebarOpen) toggleSidebar();
-      if(s.pageNum!==curPage){curPage=s.pageNum;renderPage().then(()=>highlightPin(s.id));}
-      else highlightPin(s.id);
+      if(sbOpen) toggleSB();
+      if(s.pageNum!==curPage){curPage=s.pageNum;renderPage().then(()=>hlPin(s.id));}
+      else hlPin(s.id);
     });
     list.appendChild(d);
   });
 }
 
-function toggleSidebar(){
-  sidebarOpen=!sidebarOpen;
-  sidebar.classList.toggle('hidden',!sidebarOpen);
-  document.getElementById('btn-list').classList.toggle('on',sidebarOpen);
+function toggleSB(){
+  sbOpen=!sbOpen;
+  document.getElementById('sb').classList.toggle('off',!sbOpen);
+  document.getElementById('btn-sb').classList.toggle('on',sbOpen);
 }
 
-function highlightPin(id){
+function hlPin(id){
   const el=document.querySelector(`.pin[data-id="${id}"]`);
   if(!el) return;
-  closeDDs();
-  el.classList.add('open');
-  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+  closeDDs(); el.classList.add('open');
 }
 
-document.getElementById('btn-list').addEventListener('click',toggleSidebar);
+document.getElementById('btn-sb').addEventListener('click',toggleSB);
 
-/* ===== EDIT MODAL ===== */
+/* ========== EDIT MODAL ========== */
 function openEdit(id){
   editId=id;
-  const sym=symbols.find(s=>s.id===id);
-  document.getElementById('f-name').value=sym.name||'';
-  document.getElementById('f-type').value=sym.type||'';
-  document.getElementById('f-memo').value=sym.memo||'';
-  editingFiles=[...sym.files.map(f=>({...f}))];
-  renderFileList();
-  document.getElementById('emod-title').textContent=sym.name||'シンボル編集';
+  const s=symbols.find(x=>x.id===id);
+  document.getElementById('fn').value=s.name||'';
+  document.getElementById('ft').value=s.type||'';
+  document.getElementById('fm').value=s.memo||'';
+  editFiles=[...s.files.map(f=>({...f}))];
+  renderFList();
+  document.getElementById('etitle').textContent=s.name||'シンボル編集';
   document.getElementById('ov').classList.add('show');
-  setTimeout(()=>document.getElementById('f-name').focus(),300);
+  setTimeout(()=>document.getElementById('fn').focus(),300);
 }
 
-function renderFileList(){
-  const cont=document.getElementById('f-files');
-  cont.innerHTML='';
-  editingFiles.forEach((f,i)=>{
-    const row=document.createElement('div');
-    row.className='file-row';
-    row.innerHTML=`<span class="file-row-icon">${fileIconSVG(f.mime)}</span><span>${esc(f.name)}</span><button class="file-del" aria-label="削除">✕</button>`;
-    row.querySelector('.file-del').addEventListener('click',()=>{editingFiles.splice(i,1);renderFileList()});
-    cont.appendChild(row);
+function renderFList(){
+  const c=document.getElementById('ffiles'); c.innerHTML='';
+  editFiles.forEach((f,i)=>{
+    const r=document.createElement('div'); r.className='frow';
+    r.innerHTML=`<span style="color:var(--text2)">${ficon(f.mime)}</span><span>${esc(f.name)}</span><button class="fdel">✕</button>`;
+    r.querySelector('.fdel').addEventListener('click',()=>{editFiles.splice(i,1);renderFList()});
+    c.appendChild(r);
   });
 }
 
-document.getElementById('add-file-btn').addEventListener('click',()=>document.getElementById('fin-attach').click());
-document.getElementById('fin-attach').addEventListener('change',async e=>{
+document.getElementById('addfile').addEventListener('click',()=>document.getElementById('fattach').click());
+document.getElementById('fattach').addEventListener('change',async e=>{
   for(const f of Array.from(e.target.files)){
-    const dr=await readFileAsDataURL(f);
-    editingFiles.push({name:f.name,dataURL:dr,mime:f.type});
+    const d=await toDataURL(f);
+    editFiles.push({name:f.name,dataURL:d,mime:f.type});
   }
-  renderFileList();
-  e.target.value='';
+  renderFList(); e.target.value='';
 });
 
-function readFileAsDataURL(f){
+function toDataURL(f){
   return new Promise(res=>{const r=new FileReader();r.onload=ev=>res(ev.target.result);r.readAsDataURL(f)});
 }
 
-document.getElementById('emod-save').addEventListener('click',()=>{
-  const sym=symbols.find(s=>s.id===editId);
-  if(!sym) return;
-  sym.name=document.getElementById('f-name').value.trim();
-  sym.type=document.getElementById('f-type').value.trim();
-  sym.memo=document.getElementById('f-memo').value.trim();
-  sym.files=[...editingFiles];
-  renderAllPins();
-  updateSidebar();
+document.getElementById('emsave').addEventListener('click',()=>{
+  const s=symbols.find(x=>x.id===editId); if(!s) return;
+  s.name=document.getElementById('fn').value.trim();
+  s.type=document.getElementById('ft').value.trim();
+  s.memo=document.getElementById('fm').value.trim();
+  s.files=[...editFiles];
+  renderAllPins(); updateSB();
   document.getElementById('ov').classList.remove('show');
-  toast(`「${sym.name||'シンボル'}」を保存しました`);
-  setStatus(`「${sym.name||'シンボル'}」を保存しました`);
+  toast(`「${s.name||'シンボル'}」を保存しました`);
 });
 
-document.getElementById('emod-del').addEventListener('click',()=>{
+document.getElementById('emdel').addEventListener('click',()=>{
   if(!confirm('このシンボルを削除しますか？')) return;
-  const idx=symbols.findIndex(s=>s.id===editId);
-  if(idx>=0){if(symbols[idx].el)symbols[idx].el.remove();symbols.splice(idx,1);}
-  updateSidebar();
-  document.getElementById('ov').classList.remove('show');
+  const i=symbols.findIndex(x=>x.id===editId);
+  if(i>=0){if(symbols[i].el)symbols[i].el.remove();symbols.splice(i,1);}
+  updateSB(); document.getElementById('ov').classList.remove('show');
   toast('シンボルを削除しました');
 });
 
-document.getElementById('emod-x').addEventListener('click',()=>{
-  // if new and empty, remove
-  const sym=symbols.find(s=>s.id===editId);
-  if(sym&&!sym.name&&sym.files.length===0){
-    if(sym.el)sym.el.remove();
-    symbols=symbols.filter(s=>s.id!==editId);
-    updateSidebar();
-  }
+document.getElementById('emx').addEventListener('click',()=>{
+  const s=symbols.find(x=>x.id===editId);
+  if(s&&!s.name&&s.files.length===0){if(s.el)s.el.remove();symbols=symbols.filter(x=>x.id!==editId);updateSB();}
   document.getElementById('ov').classList.remove('show');
 });
+document.getElementById('ov').addEventListener('click',e=>{if(e.target===document.getElementById('ov'))document.getElementById('emx').click()});
 
-document.getElementById('ov').addEventListener('click',e=>{
-  if(e.target===document.getElementById('ov')) document.getElementById('emod-x').click();
-});
-
-/* ===== FILE VIEWER ===== */
-function openFileViewer(f){
-  document.getElementById('fov-fname').textContent=f.name;
+/* ========== FILE VIEWER ========== */
+function openFov(f){
+  document.getElementById('fov-name').textContent=f.name;
   const img=document.getElementById('fov-img');
-  const pdfw=document.getElementById('fov-pdf-wrap');
-  const ifr=document.getElementById('fov-iframe');
-  const nop=document.getElementById('fov-nopreview');
-  img.style.display='none'; pdfw.style.display='none'; nop.style.display='none';
+  const pdfw=document.getElementById('fov-pdfw');
+  const msg=document.getElementById('fov-msg');
+  img.style.display='none'; pdfw.style.display='none'; msg.style.display='none';
   if(f.mime&&f.mime.startsWith('image')){
     img.src=f.dataURL; img.style.display='block';
   } else if(f.mime==='application/pdf'){
-    // iOS Safari: open in new tab for PDF (iframe PDF unreliable)
     const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
     if(isIOS){
-      pdfw.style.display='none';
-      nop.innerHTML='iOSのSafariではPDFを別タブで開きます<br><br><button class="tb-btn" id="open-pdf-btn" style="margin:auto;display:flex">PDFを開く</button>';
-      nop.style.display='block';
-      setTimeout(()=>{
-        const btn=document.getElementById('open-pdf-btn');
-        if(btn) btn.addEventListener('click',()=>window.open(f.dataURL,'_blank'));
-      },100);
+      msg.innerHTML='PDFは別タブで開きます<br><br><button class="btn" onclick="window.open(\''+f.dataURL+'\',\'_blank\')" style="margin:auto;display:flex;padding:10px 20px;font-size:14px">PDFを開く ↗</button>';
+      msg.style.display='block';
     } else {
-      ifr.src=f.dataURL; pdfw.style.display='block';
+      document.getElementById('fov-iframe').src=f.dataURL; pdfw.style.display='block';
     }
   } else {
-    nop.innerHTML='このファイル形式はプレビューできません<br><small>ダウンロードしてご確認ください</small>';
-    nop.style.display='block';
+    msg.innerHTML='このファイル形式はプレビューできません';
+    msg.style.display='block';
   }
   document.getElementById('fov').classList.add('show');
 }
@@ -790,65 +741,74 @@ document.getElementById('fov-x').addEventListener('click',()=>{
   document.getElementById('fov-iframe').src='';
 });
 
-/* ===== TOOLBAR ===== */
+/* ========== SAVE / LOAD PROJECT ========== */
+document.getElementById('btn-save').addEventListener('click',()=>{
+  if(symbols.length===0){toast('シンボルがありません');return;}
+  const data={version:2,pdfFileName,symbols:symbols.map(s=>({
+    id:s.id,name:s.name,type:s.type,memo:s.memo,
+    x:s.x,y:s.y,pageNum:s.pageNum,
+    files:s.files.map(f=>({name:f.name,mime:f.mime,dataURL:f.dataURL}))
+  }))};
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const fname=(pdfFileName.replace(/\.pdf$/i,'')||'zumen')+'.zumen';
+  a.href=url; a.download=fname; a.click();
+  URL.revokeObjectURL(url);
+  toast(`「${fname}」として保存しました`);
+});
+
+document.getElementById('btn-load').addEventListener('click',()=>document.getElementById('fin-proj').click());
+document.getElementById('fin-proj').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const text=await f.text();
+    const data=JSON.parse(text);
+    if(!data.symbols) throw new Error('invalid');
+    symbols=data.symbols.map(s=>({...s,el:null}));
+    pdfFileName=data.pdfFileName||'';
+    renderAllPins(); updateSB();
+    toast(`${symbols.length}件のシンボルを読み込みました`);
+    st(`プロジェクト「${f.name}」を読み込みました — 同じPDFを開いてください`);
+  }catch(err){toast('プロジェクトファイルの読み込みに失敗しました');}
+  e.target.value='';
+});
+
+/* ========== TOOLBAR ========== */
 document.getElementById('btn-pdf').addEventListener('click',()=>document.getElementById('fin-pdf').click());
 document.getElementById('btn-pdf2').addEventListener('click',()=>document.getElementById('fin-pdf').click());
-document.getElementById('fin-pdf').addEventListener('change',e=>{
-  const f=e.target.files[0];if(f)loadPDF(f);e.target.value='';
-});
+document.getElementById('fin-pdf').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadPDF(f);e.target.value='';});
 
 document.getElementById('btn-place').addEventListener('click',()=>{
   placing=!placing;
-  document.getElementById('btn-place').classList.toggle('on',placing);
-  document.getElementById('btn-place').innerHTML=placing
-    ?'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg> 配置'
-    :'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 閲覧';
-  wrap.style.touchAction=placing?'none':'pan-x pan-y';
-  setStatus(placing?'配置モード: 図面上のシンボル位置をタップ':'閲覧モード: ピンをタップしてメニューを表示');
+  const b=document.getElementById('btn-place');
+  b.classList.toggle('on',placing);
+  b.innerHTML=placing
+    ?'<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>配置'
+    :'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>閲覧';
+  st(placing?'配置モード: シンボル位置をタップ':'閲覧モード: ピンをタップしてメニューを表示');
 });
 
-document.getElementById('btn-prev').addEventListener('click',async()=>{if(curPage>1){curPage--;await renderPage();}});
-document.getElementById('btn-next').addEventListener('click',async()=>{if(curPage<totalPages){curPage++;await renderPage();}});
-document.getElementById('btn-zoom-in').addEventListener('click',async()=>{if(scale<4){scale=Math.min(4,+(scale+0.25).toFixed(2));await renderPage();}});
-document.getElementById('btn-zoom-out').addEventListener('click',async()=>{if(scale>0.5){scale=Math.max(0.5,+(scale-0.25).toFixed(2));await renderPage();}});
+document.getElementById('btn-prev').addEventListener('click',async()=>{if(curPage>1){curPage--;await renderPage(true);}});
+document.getElementById('btn-next').addEventListener('click',async()=>{if(curPage<totalPages){curPage++;await renderPage(true);}});
 
-/* ===== PINCH ZOOM ===== */
-let pinchStartDist=0, pinchStartScale=1;
-wrap.addEventListener('touchstart',e=>{
-  if(e.touches.length===2){
-    pinchStartDist=Math.hypot(
-      e.touches[1].clientX-e.touches[0].clientX,
-      e.touches[1].clientY-e.touches[0].clientY
-    );
-    pinchStartScale=scale;
-  }
-},{passive:true});
+document.getElementById('btn-zi').addEventListener('click',()=>{
+  if(scale>=maxScale) return;
+  const cx=cw.clientWidth/2, cy=cw.clientHeight/2;
+  const ns=Math.min(maxScale,+(scale*1.3).toFixed(2));
+  panX=cx-(cx-panX)*(ns/scale); panY=cy-(cy-panY)*(ns/scale);
+  scale=ns; applyTransform(); showZind();
+});
+document.getElementById('btn-zo').addEventListener('click',()=>{
+  if(scale<=minScale) return;
+  const cx=cw.clientWidth/2, cy=cw.clientHeight/2;
+  const ns=Math.max(minScale,+(scale/1.3).toFixed(2));
+  panX=cx-(cx-panX)*(ns/scale); panY=cy-(cy-panY)*(ns/scale);
+  scale=ns; applyTransform(); showZind();
+});
+document.getElementById('btn-zfit').addEventListener('click',()=>{if(pdfDoc)fitPage()});
 
-wrap.addEventListener('touchmove',e=>{
-  if(e.touches.length===2&&pdfDoc){
-    const dist=Math.hypot(
-      e.touches[1].clientX-e.touches[0].clientX,
-      e.touches[1].clientY-e.touches[0].clientY
-    );
-    const newScale=Math.min(4,Math.max(0.5,+(pinchStartScale*(dist/pinchStartDist)).toFixed(2)));
-    if(Math.abs(newScale-scale)>0.05){
-      scale=newScale;
-      document.getElementById('zoom-label').textContent=Math.round(scale*100)+'%';
-    }
-  }
-},{passive:true});
-
-wrap.addEventListener('touchend',e=>{
-  if(e.touches.length<2&&pinchStartDist>0&&pdfDoc){
-    pinchStartDist=0;
-    renderPage();
-  }
-},{passive:true});
-
-/* ===== LOCAL STORAGE (optional save) ===== */
-// Auto-save symbol metadata (not files due to size) on change
-// not implemented to keep file size small
-
+window.addEventListener('resize',()=>{if(pdfDoc)fitPage()});
 </script>
 </body>
 </html>
