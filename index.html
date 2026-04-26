@@ -313,7 +313,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
 
 <div id="toast"></div>
 <input type="file" id="fin-pdf" accept="application/pdf" style="display:none">
-<input type="file" id="fin-proj" accept=".zumen,.json" style="display:none">
+<input type="file" id="fin-proj" accept=".zumen,.json,.txt,application/json,text/plain" style="display:none">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -322,6 +322,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 
 /* ========== STATE ========== */
 let pdfDoc=null, curPage=1, totalPages=1;
+let pdfDataURL='';  // stores PDF as base64 for save/restore
 let scale=1.0, minScale=0.3, maxScale=6.0;
 let panX=0, panY=0;           // current pan offset
 let placing=true;
@@ -397,6 +398,10 @@ async function loadPDF(file){
   try{
     pdfFileName=file.name;
     const ab=await file.arrayBuffer();
+    // store as base64 for embedding in save file
+    const bytes=new Uint8Array(ab);
+    let bin='';for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+    pdfDataURL='data:application/pdf;base64,'+btoa(bin);
     pdfDoc=await pdfjsLib.getDocument({data:ab}).promise;
     totalPages=pdfDoc.numPages; curPage=1;
     dz.style.display='none';
@@ -764,7 +769,7 @@ document.getElementById('fov-x').addEventListener('click',()=>{
 
 /* ========== SAVE / LOAD PROJECT ========== */
 function buildSaveData(){
-  return {version:2,pdfFileName,symbols:symbols.map(s=>({
+  return {version:3,pdfFileName,pdfDataURL,symbols:symbols.map(s=>({
     id:s.id,name:s.name,type:s.type,memo:s.memo,
     x:s.x,y:s.y,pageNum:s.pageNum,
     files:s.files.map(f=>({name:f.name,mime:f.mime,dataURL:f.dataURL}))
@@ -779,11 +784,11 @@ function doSave(){
   const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
 
   if(isIOS && navigator.share){
-    // iOS16+: Web Share API でファイルアプリに直接保存できる
+    // iOS: Web Share API でファイルアプリに直接保存
     const blob=new Blob([json],{type:'application/octet-stream'});
     const file=new File([blob],fname,{type:'application/octet-stream'});
     navigator.share({files:[file],title:fname})
-      .then(()=>toast('保存しました'))
+      .then(()=>toast('「ファイル」アプリに保存してください'))
       .catch(err=>{
         if(err.name!=='AbortError') showSaveModal(json,fname);
       });
@@ -832,26 +837,47 @@ function showSaveModal(json,fname){
 
 document.getElementById('btn-save').addEventListener('click',doSave);
 
-function loadFromJSON(json, label){
+async function loadFromJSON(json, label){
   try{
     const data=JSON.parse(json);
     if(!data.symbols) throw new Error('invalid');
     symbols=data.symbols.map(s=>({...s,el:null}));
     pdfFileName=data.pdfFileName||'';
-    renderAllPins(); updateSB();
-    toast(`${symbols.length}件のシンボルを読み込みました`);
-    st(`「${label}」を読み込みました — 同じPDFを開いてください`);
-  }catch(err){toast('データの読み込みに失敗しました — 正しいファイルか確認してください');}
+
+    if(data.pdfDataURL){
+      // PDF embedded — restore automatically
+      st('PDFを復元中...');
+      const b64=data.pdfDataURL.split(',')[1];
+      const bin=atob(b64);
+      const ab=new ArrayBuffer(bin.length);
+      const ua=new Uint8Array(ab);
+      for(let i=0;i<bin.length;i++) ua[i]=bin.charCodeAt(i);
+      pdfDataURL=data.pdfDataURL;
+      pdfDoc=await pdfjsLib.getDocument({data:ab}).promise;
+      totalPages=pdfDoc.numPages; curPage=1;
+      dz.style.display='none';
+      await renderPage(true);
+      toast(`${symbols.length}件のシンボルと図面を復元しました`);
+      st(`「${pdfFileName}」を復元しました`);
+    } else {
+      // Old format without PDF — ask user to open PDF
+      renderAllPins(); updateSB();
+      toast(`${symbols.length}件のシンボルを読み込みました`);
+      st(`シンボルを読み込みました — 「PDF」ボタンで同じ図面を開いてください`);
+    }
+  }catch(err){
+    console.error(err);
+    toast('読み込みに失敗しました — 正しいファイルか確認してください');
+  }
 }
 
 document.getElementById('btn-load').addEventListener('click',()=>{
-  const isIOS=/iP(hone|ad|od)/.test(navigator.userAgent);
-  if(isIOS){
-    showLoadModal();
-  } else {
-    document.getElementById('fin-proj').click();
-  }
+  document.getElementById('fin-proj').click();
 });
+document.getElementById('btn-load').addEventListener('touchend',e=>{
+  e.preventDefault(); e.stopPropagation();
+  document.getElementById('fin-proj').click();
+},{passive:false});
 
 document.getElementById('fin-proj').addEventListener('change',async e=>{
   const f=e.target.files[0]; if(!f) return;
