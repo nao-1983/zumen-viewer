@@ -220,9 +220,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
   <div id="toolbar">
     <h1>📐 図面ビューワー</h1>
     <div class="sep"></div>
-    <button class="btn" id="btn-pdf">
+    <label class="btn" id="btn-pdf" style="cursor:pointer">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF
-    </button>
+      <input type="file" id="fin-pdf" accept="application/pdf" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+    </label>
     <div class="sep"></div>
     <button class="btn on" id="btn-place">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>配置
@@ -240,9 +241,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
     <button class="btn green" id="btn-save">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存
     </button>
-    <button class="btn" id="btn-load">
+    <label class="btn" id="btn-load" style="cursor:pointer">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>読込
-    </button>
+      <input type="file" id="fin-proj" accept=".zumen,.json,.txt" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+    </label>
     <div class="sep"></div>
     <button class="btn" id="btn-sb">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>一覧
@@ -255,7 +257,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
         <p>「PDF」ボタンで図面を読み込む</p>
         <small>読み込み後、シンボル位置をタップして登録</small>
-        <button class="btn" id="btn-pdf2" style="margin-top:8px;padding:10px 22px;font-size:14px">PDFを選択</button>
+        <label class="btn" id="btn-pdf2" style="margin-top:8px;padding:10px 22px;font-size:14px;cursor:pointer" for="fin-pdf">PDFを選択</label>
       </div>
       <div id="cv-container"><canvas id="pdf-canvas"></canvas></div>
       <div id="zindicator"></div>
@@ -312,9 +314,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--fon
 </div>
 
 <div id="toast"></div>
-<!-- file inputs: wrapped in label so iPad Safari can trigger reliably -->
-<label id="label-pdf" style="display:none"><input type="file" id="fin-pdf" accept="application/pdf"></label>
-<label id="label-proj" style="display:none"><input type="file" id="fin-proj" accept=".zumen,.json,.txt,application/json,text/plain"></label>
+
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -872,35 +872,13 @@ async function loadFromJSON(json, label){
   }
 }
 
-function triggerFilePicker(inputId){
-  // iPad-safe: temporarily make label visible and click it
-  const lbl=document.getElementById('label-'+inputId.replace('fin-',''));
-  if(lbl){
-    lbl.style.position='fixed';
-    lbl.style.opacity='0';
-    lbl.style.top='0';lbl.style.left='0';
-    lbl.style.width='100%';lbl.style.height='100%';
-    lbl.style.zIndex='9999';
-    lbl.style.display='block';
-    // click the actual input inside the label
-    document.getElementById(inputId).click();
-    setTimeout(()=>{lbl.style.display='none';},500);
-  } else {
-    document.getElementById(inputId).click();
-  }
-}
+// file pickers: now handled via <label for> directly in HTML
 
-document.getElementById('btn-load').addEventListener('click',()=>triggerFilePicker('fin-proj'));
-document.getElementById('btn-load').addEventListener('touchend',e=>{
-  e.preventDefault();e.stopPropagation();
-  triggerFilePicker('fin-proj');
-},{passive:false});
-
-document.getElementById('fin-proj').addEventListener('change',async e=>{
-  const f=e.target.files[0]; if(!f) return;
+document.getElementById('fin-proj').addEventListener('change',async function(){
+  const f=this.files[0]; if(!f) return;
   const text=await f.text();
   loadFromJSON(text, f.name);
-  e.target.value='';
+  this.value='';
 });
 
 function showLoadModal(){
@@ -933,7 +911,7 @@ function showLoadModal(){
   });
   document.getElementById('load-file-btn').addEventListener('click',()=>{
     m.remove();
-    triggerFilePicker('fin-proj');
+    document.getElementById('fin-proj').closest('label').click();
   });
   document.getElementById('load-close-btn').addEventListener('click',()=>m.remove());
   m.addEventListener('click',e=>{if(e.target===m)m.remove()});
@@ -942,17 +920,10 @@ function showLoadModal(){
 }
 
 /* ========== TOOLBAR ========== */
-document.getElementById('btn-pdf').addEventListener('click',()=>triggerFilePicker('fin-pdf'));
-document.getElementById('btn-pdf2').addEventListener('click',()=>triggerFilePicker('fin-pdf'));
-document.getElementById('btn-pdf2').addEventListener('touchend',e=>{
-  e.preventDefault();e.stopPropagation();
-  triggerFilePicker('fin-pdf');
-},{passive:false});
-document.getElementById('btn-pdf').addEventListener('touchend',e=>{
-  e.preventDefault();e.stopPropagation();
-  triggerFilePicker('fin-pdf');
-},{passive:false});
-document.getElementById('fin-pdf').addEventListener('change',e=>{const f=e.target.files[0];if(f)loadPDF(f);e.target.value='';});
+
+document.getElementById('fin-pdf').addEventListener('change',function(){
+  const f=this.files[0]; if(f) loadPDF(f); this.value='';
+});
 
 document.getElementById('btn-place').addEventListener('click',()=>{
   placing=!placing;
