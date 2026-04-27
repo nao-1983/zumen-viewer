@@ -473,14 +473,18 @@ cw.addEventListener('touchmove',e=>{
   e.preventDefault();const ts=[...e.touches];
   if(g.type==='pinch'&&ts.length>=2){
     const d=d2(ts[0],ts[1]),mv=m2(ts[0],ts[1]);
-    // Damping: smooth the rate change with sqrt to reduce sensitivity
+    // STRONG damping: rate of zoom change is heavily reduced
+    // ratio of 2.0 (fingers doubled apart) → only 1.32x zoom
+    // ratio of 0.5 (fingers halved) → only 0.76x zoom
     const rawRatio=d/g.d0;
-    const dampedRatio=Math.pow(rawRatio,0.7); // 0.7 = damping factor (1.0=no damping, lower=smoother)
+    const dampedRatio=Math.pow(rawRatio,0.4); // 0.4 = very gentle damping
     let ns=Math.min(maxSc,Math.max(minSc,g.s0*dampedRatio));
-    // Correct pan calculation: keep midpoint anchored to its starting canvas position
-    // canvas point under start midpoint: (g.m0 - g.panX0) / g.s0
-    // we want this same canvas point to stay under current midpoint mv after scale change
-    if(!g.panX0){g.panX0=panX;g.panY0=panY;}
+    // Clamp per-frame change to prevent jumps
+    const maxChange=1.05; // max 5% scale change per touchmove event
+    if(ns/scale>maxChange) ns=scale*maxChange;
+    else if(scale/ns>maxChange) ns=scale/maxChange;
+    // Pan calculation: anchor canvas point under starting midpoint to current midpoint
+    if(!g.panX0&&g.panX0!==0){g.panX0=panX;g.panY0=panY;}
     const cpx=(g.m0.x-g.panX0)/g.s0, cpy=(g.m0.y-g.panY0)/g.s0;
     panX=mv.x-cpx*ns;
     panY=mv.y-cpy*ns;
