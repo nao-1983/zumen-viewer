@@ -467,14 +467,23 @@ function m2(a,b){return{x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2}}
 cw.addEventListener('touchstart',e=>{
   e.preventDefault();const ts=[...e.touches];
   if(ts.length===1){g={type:'pend',sx:ts[0].clientX,sy:ts[0].clientY,lx:ts[0].clientX,ly:ts[0].clientY,moved:false,tgt:e.target};}
-  else if(ts.length===2){closeAllDD();g={type:'pinch',d0:d2(ts[0],ts[1]),s0:scale,m0:m2(ts[0],ts[1])};}
+  else if(ts.length===2){closeAllDD();g={type:'pinch',d0:d2(ts[0],ts[1]),s0:scale,m0:m2(ts[0],ts[1]),panX0:panX,panY0:panY};}
 },{passive:false});
 cw.addEventListener('touchmove',e=>{
   e.preventDefault();const ts=[...e.touches];
   if(g.type==='pinch'&&ts.length>=2){
-    const d=d2(ts[0],ts[1]),ns=Math.min(maxSc,Math.max(minSc,g.s0*(d/g.d0))),mv=m2(ts[0],ts[1]);
-    panX=mv.x-(g.m0.x-panX)*(ns/scale)-(g.m0.x-mv.x);
-    panY=mv.y-(g.m0.y-panY)*(ns/scale)-(g.m0.y-mv.y);
+    const d=d2(ts[0],ts[1]),mv=m2(ts[0],ts[1]);
+    // Damping: smooth the rate change with sqrt to reduce sensitivity
+    const rawRatio=d/g.d0;
+    const dampedRatio=Math.pow(rawRatio,0.7); // 0.7 = damping factor (1.0=no damping, lower=smoother)
+    let ns=Math.min(maxSc,Math.max(minSc,g.s0*dampedRatio));
+    // Correct pan calculation: keep midpoint anchored to its starting canvas position
+    // canvas point under start midpoint: (g.m0 - g.panX0) / g.s0
+    // we want this same canvas point to stay under current midpoint mv after scale change
+    if(!g.panX0){g.panX0=panX;g.panY0=panY;}
+    const cpx=(g.m0.x-g.panX0)/g.s0, cpy=(g.m0.y-g.panY0)/g.s0;
+    panX=mv.x-cpx*ns;
+    panY=mv.y-cpy*ns;
     scale=ns;applyT();showZind();return;
   }
   if((g.type==='pend'||g.type==='pan')&&ts.length===1){
