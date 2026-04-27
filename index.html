@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="図面ビューワー">
+<title>図面シンボルビューワー</title>
+<style>
+:root{
+  --bg:#F5F4F0;--sur:#FFF;--sur2:#EEECEA;
+  --bd:#DDDBD3;--bd2:#C0BDB5;
+  --tx:#1C1B18;--tx2:#6B6960;--tx3:#9B9A92;
+  --ac:#C0392B;--ac2:#FDECEA;
+  --in:#1A5F9E;--in2:#E8F0FB;--in3:#1A5F9E;
+  --gr:#1A7A3C;--gr2:#E6F4EC;
+  --r:10px;--rl:16px;
+  --f:'Helvetica Neue',Helvetica,'Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1A1916;--sur:#242320;--sur2:#2E2D29;
+  --bd:#3A3934;--bd2:#525048;
+  --tx:#F0EFE9;--tx2:#9B9A92;--tx3:#5A5950;
+  --ac:#E05A4A;--ac2:#3A1A16;
+  --in:#4A90D9;--in2:#162030;--in3:#7ABAFF;
+  --gr:#2A9A4C;--gr2:#0E2A18;
+}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+/* CRITICAL: html and body must NOT have touch-action:none */
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--f);color:var(--tx)}
+
+#app{display:flex;flex-direction:column;height:100dvh;height:100vh}
+
+/* ── TOOLBAR ──
+   touch-action: default (auto) so labels/inputs work on iOS
+   We do NOT set touch-action:none here */
+#tb{
+  display:flex;align-items:center;gap:5px;flex-shrink:0;
+  padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));
+  background:var(--sur);border-bottom:1px solid var(--bd);
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  position:relative;z-index:50;
+}
+#tb::-webkit-scrollbar{display:none}
+#tb h1{font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0;margin-right:2px}
+.sp{width:1px;height:18px;background:var(--bd);flex-shrink:0}
+
+/* Shared style for all toolbar elements */
+.tbe{
+  font-size:12px;padding:6px 9px;border:1px solid var(--bd2);
+  background:var(--sur);color:var(--tx);border-radius:8px;
+  white-space:nowrap;flex-shrink:0;min-height:36px;min-width:36px;
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  cursor:pointer;font-family:var(--f);-webkit-user-select:none;user-select:none;
+}
+button.tbe{touch-action:manipulation}
+button.tbe:active{background:var(--sur2);transform:scale(.96)}
+button.tbe.on{background:var(--ac2);color:var(--ac);border-color:var(--ac)}
+button.tbe.green{background:var(--gr2);color:var(--gr);border-color:var(--gr)}
+
+/* File label in toolbar — MUST NOT have touch-action:none anywhere in ancestors */
+label.tbe{
+  position:relative;overflow:hidden;
+  touch-action:manipulation; /* allow tap, prevent double-tap zoom only */
+}
+label.tbe:active{background:var(--sur2)}
+label.tbe input[type=file]{
+  /* Fills the entire label, fully transparent but physically present */
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  opacity:0.001;cursor:pointer;
+  font-size:16px;border:none;background:none;
+  -webkit-appearance:none;appearance:none;
+  touch-action:manipulation;
+}
+
+.pi{font-size:12px;color:var(--tx2);min-width:44px;text-align:center;white-space:nowrap;flex-shrink:0}
+
+/* ── MAIN ── */
+#main{display:flex;flex:1;overflow:hidden;position:relative}
+
+/* ── CANVAS WRAP ──
+   Only this element gets touch-action:none, nothing else */
+#cw{flex:1;position:relative;overflow:hidden;background:#777;touch-action:none}
+#cvc{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+#pdf-canvas{display:block}
+
+/* ── SIDEBAR ── */
+#sb{width:230px;background:var(--sur);border-left:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;transition:transform .28s ease}
+#sb.off{transform:translateX(100%);position:absolute;right:0;top:0;bottom:0;z-index:40;box-shadow:-6px 0 24px rgba(0,0,0,.18)}
+#sb-head{padding:9px 12px;font-size:11px;font-weight:700;color:var(--tx2);border-bottom:1px solid var(--bd);letter-spacing:.06em;text-transform:uppercase}
+#sym-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:5px}
+.si{padding:8px 10px;border-radius:var(--r);cursor:pointer;border-bottom:1px solid var(--bd)}
+.si:last-child{border-bottom:none}
+.si:active{background:var(--sur2)}
+.si-name{font-size:13px;font-weight:500}
+.si-sub{font-size:11px;color:var(--tx2);margin-top:2px}
+.si-fc{font-size:11px;color:var(--tx3);margin-top:1px}
+
+/* ── STATUS ── */
+#st{padding:4px 12px;padding-bottom:max(4px,env(safe-area-inset-bottom));font-size:11px;color:var(--tx2);background:var(--sur);border-top:1px solid var(--bd);flex-shrink:0}
+
+/* ── DROP ZONE ──
+   CRITICAL: position:fixed and placed OUTSIDE #cw in the DOM
+   so it never inherits touch-action:none */
+#dz{
+  display:none;position:fixed;inset:0;
+  top:calc(36px + max(8px,env(safe-area-inset-top)) + 1px);
+  bottom:calc(20px + max(4px,env(safe-area-inset-bottom)));
+  z-index:30;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:var(--sur2);
+  /* No touch-action override — inherits auto from body */
+}
+#dz.show{display:flex}
+#dz svg{opacity:.25}
+#dz p{font-size:16px;color:var(--tx2);font-weight:500}
+#dz small{font-size:13px;color:var(--tx3)}
+#dz-lbl{
+  margin-top:8px;display:inline-flex;align-items:center;gap:6px;
+  padding:14px 28px;border:1px solid var(--bd2);background:var(--sur);color:var(--tx);
+  border-radius:12px;font-size:16px;font-family:var(--f);cursor:pointer;
+  position:relative;overflow:hidden;
+  touch-action:manipulation;
+}
+#dz-lbl input[type=file]{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  opacity:0.001;cursor:pointer;font-size:16px;-webkit-appearance:none;
+  touch-action:manipulation;
+}
+#dz-lbl:active{background:var(--sur2)}
+
+/* ── PINS ── */
+.pin{position:absolute;transform:translate(-50%,-50%);z-index:20}
+.pdot{width:26px;height:26px;border-radius:50%;background:var(--ac);border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:pointer;transition:transform .1s}
+.pdot:active{transform:scale(1.2)}
+.plbl{position:absolute;top:28px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s}
+.pin.open .plbl{opacity:1}
+
+/* ── DROPDOWN ── */
+.pdd{position:absolute;top:32px;left:50%;transform:translateX(-50%);background:var(--sur);border:1px solid var(--bd);border-radius:var(--rl);min-width:210px;max-width:280px;z-index:100;display:none;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.22)}
+.pin.open .pdd{display:block}
+.ddh{padding:10px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:6px}
+.ddh-name{flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddbadge{font-size:10px;padding:2px 6px;border-radius:20px;background:var(--in2);color:var(--in3);white-space:nowrap;flex-shrink:0}
+.ddi{display:flex;align-items:center;gap:8px;padding:12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--bd)}
+.ddi:active{background:var(--sur2)}
+.ddi-icon{flex-shrink:0;color:var(--tx2)}
+.ddi-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddempty{padding:10px 12px;font-size:12px;color:var(--tx3)}
+.ddedit{padding:12px;font-size:12px;color:var(--in);background:var(--in2);cursor:pointer;display:flex;align-items:center;gap:6px;border-top:1px solid var(--bd)}
+.ddedit:active{opacity:.7}
+
+/* ── EDIT MODAL ── */
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
+#ov.show{display:flex}
+@media(min-width:600px){#ov{align-items:center}#emod{border-radius:var(--rl);max-height:88vh}}
+#emod{background:var(--sur);width:100%;max-width:540px;border-radius:var(--rl) var(--rl) 0 0;max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+.mh{width:36px;height:4px;background:var(--bd2);border-radius:2px;margin:10px auto 4px;flex-shrink:0}
+.mhead{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.mtitle{font-size:15px;font-weight:600}
+.mx{background:var(--sur2);border:none;cursor:pointer;font-size:15px;color:var(--tx2);padding:6px 10px;border-radius:8px;min-width:36px;min-height:36px;font-family:var(--f);touch-action:manipulation}
+.mbody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;letter-spacing:.05em;text-transform:uppercase}
+.field input,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--bd2);border-radius:var(--r);font-size:15px;background:var(--sur);color:var(--tx);font-family:var(--f);-webkit-appearance:none;min-height:44px}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--in);box-shadow:0 0 0 3px var(--in2)}
+.field textarea{resize:vertical;min-height:80px}
+.flist{display:flex;flex-direction:column;gap:5px;margin-top:6px}
+.frow{display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--sur2);border-radius:var(--r);font-size:13px;border:1px solid var(--bd)}
+.frow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fdel{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px;padding:2px 6px;min-width:32px;min-height:32px;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
+/* attach file label in modal — modal is position:fixed so no touch-action:none ancestor */
+.add-lbl{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:13px;color:var(--in);cursor:pointer;padding:10px 0;font-weight:500;
+  position:relative;overflow:hidden;touch-action:manipulation;
+}
+.add-lbl input[type=file]{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  opacity:0.001;cursor:pointer;font-size:16px;-webkit-appearance:none;
+  touch-action:manipulation;
+}
+.mfoot{display:flex;gap:8px;padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--bd);flex-shrink:0;background:var(--sur)}
+.bsave{flex:1;padding:12px;background:var(--ac);color:#fff;border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:pointer;min-height:44px;font-family:var(--f);touch-action:manipulation}
+.bsave:active{opacity:.85}
+.bdel{padding:12px 14px;border:1px solid var(--ac);color:var(--ac);background:none;border-radius:var(--r);font-size:15px;cursor:pointer;min-height:44px;font-family:var(--f);touch-action:manipulation}
+.bdel:active{background:var(--ac2)}
+
+/* ── FILE VIEWER ── */
+#fov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:300;flex-direction:column}
+#fov.show{display:flex}
+#fov-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));flex-shrink:0}
+#fov-name{font-size:14px;color:#fff;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fov-x{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer;min-height:40px;white-space:nowrap;font-family:var(--f);touch-action:manipulation}
+#fov-body{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px}
+#fov-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;display:none}
+#fov-pdfw{width:100%;height:100%;display:none}
+#fov-iframe{width:100%;height:100%;border:none;border-radius:8px}
+#fov-msg{text-align:center;color:rgba(255,255,255,.7);font-size:14px;line-height:1.8;display:none}
+
+/* ── ZOOM INDICATOR ── */
+#zind{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;font-size:13px;font-weight:600;padding:5px 14px;border-radius:20px;pointer-events:none;opacity:0;transition:opacity .3s;z-index:30}
+#zind.show{opacity:1}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:rgba(20,20,18,.92);color:#fff;font-size:13px;padding:9px 18px;border-radius:20px;z-index:500;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══ TOOLBAR ═══
+       touch-action is NOT set here — inherits 'auto' from body
+       This is critical for iOS file input labels to work -->
+  <div id="tb">
+    <h1>📐 図面</h1>
+    <div class="sp"></div>
+
+    <label class="tbe" title="pdf">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF
+      <input type="file" id="in-pdf" accept=".pdf,application/pdf,*/*">
+    </label>
+
+    <div class="sp"></div>
+    <button class="tbe on" id="btn-place">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>配置
+    </button>
+    <div class="sp"></div>
+    <button class="tbe" id="btn-prev">‹</button>
+    <span class="pi" id="pinfo">1/1</span>
+    <button class="tbe" id="btn-next">›</button>
+    <div class="sp"></div>
+    <button class="tbe" id="btn-zi">＋</button>
+    <span class="pi" id="zlbl">100%</span>
+    <button class="tbe" id="btn-zo">－</button>
+    <button class="tbe" id="btn-fit">全体</button>
+    <div class="sp"></div>
+    <button class="tbe green" id="btn-save">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>保存
+    </button>
+
+    <label class="tbe" title="load">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>読込
+      <input type="file" id="in-proj">
+    </label>
+
+    <div class="sp"></div>
+    <button class="tbe" id="btn-sb">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>一覧
+    </button>
+  </div>
+
+  <!-- ═══ MAIN ═══ -->
+  <div id="main">
+    <!-- cw is the ONLY element with touch-action:none -->
+    <div id="cw">
+      <div id="cvc"><canvas id="pdf-canvas"></canvas></div>
+      <div id="zind"></div>
+    </div>
+    <div id="sb" class="off">
+      <div id="sb-head">シンボル一覧 <span id="scnt" style="font-weight:400;color:var(--tx3)">(0)</span></div>
+      <div id="sym-list"></div>
+    </div>
+  </div>
+  <div id="st">PDFを開いてシンボル位置をタップしてください</div>
+</div>
+
+<!-- ═══ DROP ZONE ═══
+     position:fixed, placed OUTSIDE #cw — no touch-action:none inheritance -->
+<div id="dz" class="show">
+  <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+  <p>「PDF」ボタンで図面を読み込む</p>
+  <small>読み込み後、シンボル位置をタップして登録</small>
+  <label id="dz-lbl">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    PDFを選択
+    <input type="file" id="in-pdf2" accept=".pdf,application/pdf,*/*">
+  </label>
+</div>
+
+<!-- ═══ EDIT MODAL ═══
+     position:fixed — no touch-action:none inheritance -->
+<div id="ov">
+  <div id="emod">
+    <div class="mh"></div>
+    <div class="mhead">
+      <span class="mtitle" id="etitle">シンボル編集</span>
+      <button class="mx" id="emx">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="field"><label>機器名・シンボル名</label><input type="text" id="fn" placeholder="例: 電磁弁 MV-101" autocomplete="off"></div>
+      <div class="field"><label>種別</label><input type="text" id="ft" placeholder="例: 電気機器 / 計器 / バルブ" autocomplete="off"></div>
+      <div class="field"><label>仕様・メモ</label><textarea id="fm" placeholder="仕様・型番・結線情報・備考など"></textarea></div>
+      <div class="field">
+        <label>添付ファイル（写真・結線図・PDFなど）</label>
+        <div class="flist" id="ffiles"></div>
+        <label class="add-lbl">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          ファイルを追加
+          <input type="file" id="in-attach" multiple>
+        </label>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="bdel" id="emdel">削除</button>
+      <button class="bsave" id="emsave">保存して閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FILE VIEWER ═══ -->
+<div id="fov">
+  <div id="fov-bar">
+    <span id="fov-name"></span>
+    <button id="fov-x">閉じる ✕</button>
+  </div>
+  <div id="fov-body">
+    <img id="fov-img" alt="プレビュー">
+    <div id="fov-pdfw"><iframe id="fov-iframe" title="PDF"></iframe></div>
+    <div id="fov-msg"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+'use strict';
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* STATE */
+let pdfDoc=null,curPage=1,totalPages=1,pdfDataURL='',pdfFileName='';
+let scale=1,minSc=0.3,maxSc=6,panX=0,panY=0;
+let placing=true,symbols=[],editId=null,editFiles=[],sbOpen=false;
+
+/* ELEMENTS */
+const cw=document.getElementById('cw'),cvc=document.getElementById('cvc');
+const cvs=document.getElementById('pdf-canvas'),ctx=cvs.getContext('2d');
+const dz=document.getElementById('dz'),stEl=document.getElementById('st');
+
+/* UTIL */
+let toastT;
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600)}
+function setSt(m){stEl.textContent=m}
+let zindT;
+function showZind(){
+  const el=document.getElementById('zind');
+  el.textContent=Math.round(scale*100)+'%';el.classList.add('show');
+  clearTimeout(zindT);zindT=setTimeout(()=>el.classList.remove('show'),1200);
+  document.getElementById('zlbl').textContent=Math.round(scale*100)+'%';
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toDataURL(f){return new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(f)})}
+
+/* TRANSFORM */
+function applyT(){
+  cvc.style.transform=`translate(${panX}px,${panY}px) scale(${scale})`;
+  document.querySelectorAll('.pin').forEach(el=>{
+    const s=symbols.find(x=>x.id===el.dataset.id);
+    if(s)pinPos(el,s.x,s.y);
+  });
+}
+function pinPos(el,cx,cy){el.style.left=(cx*scale+panX)+'px';el.style.top=(cy*scale+panY)+'px'}
+function fitPage(){
+  const W=cw.clientWidth,H=cw.clientHeight;
+  if(!cvs.width||!cvs.height)return;
+  scale=Math.min(W/cvs.width,H/cvs.height)*0.95;
+  scale=Math.max(minSc,Math.min(maxSc,scale));
+  panX=(W-cvs.width*scale)/2;panY=(H-cvs.height*scale)/2;
+  applyT();showZind();
+}
+
+/* PDF */
+async function loadPDF(file){
+  try{
+    setSt('読み込み中...');pdfFileName=file.name;
+    const ab=await file.arrayBuffer();
+    const bytes=new Uint8Array(ab);let bin='';
+    for(let i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
+    pdfDataURL='data:application/pdf;base64,'+btoa(bin);
+    pdfDoc=await pdfjsLib.getDocument({data:ab}).promise;
+    totalPages=pdfDoc.numPages;curPage=1;
+    dz.classList.remove('show');
+    await renderPage(true);
+    setSt(`「${file.name}」読込完了 — シンボル位置をタップして登録`);
+  }catch(e){toast('PDFの読み込みに失敗しました');console.error(e)}
+}
+async function loadPDFfromB64(dataURL){
+  const b64=dataURL.split(',')[1],bin=atob(b64);
+  const ab=new ArrayBuffer(bin.length),ua=new Uint8Array(ab);
+  for(let i=0;i<bin.length;i++)ua[i]=bin.charCodeAt(i);
+  pdfDataURL=dataURL;
+  pdfDoc=await pdfjsLib.getDocument({data:ab}).promise;
+  totalPages=pdfDoc.numPages;curPage=1;
+  dz.classList.remove('show');
+  await renderPage(true);
+}
+async function renderPage(fit=false){
+  if(!pdfDoc)return;
+  const pg=await pdfDoc.getPage(curPage);
+  const vp=pg.getViewport({scale:2});
+  cvs.width=vp.width;cvs.height=vp.height;
+  cvs.style.width=vp.width+'px';cvs.style.height=vp.height+'px';
+  await pg.render({canvasContext:ctx,viewport:vp}).promise;
+  document.getElementById('pinfo').textContent=`${curPage}/${totalPages}`;
+  if(fit)fitPage();else applyT();
+  renderAllPins();
+}
+
+/* PINS */
+function renderAllPins(){
+  document.querySelectorAll('.pin').forEach(e=>e.remove());
+  symbols.filter(s=>s.pageNum===curPage).forEach(makePinEl);
+}
+function makePinEl(sym){
+  const el=document.createElement('div');el.className='pin';el.dataset.id=sym.id;pinPos(el,sym.x,sym.y);
+  const dot=document.createElement('div');dot.className='pdot';
+  const lbl=document.createElement('div');lbl.className='plbl';lbl.textContent=sym.name||'未設定';
+  const dd=makeDD(sym);
+  addTap(dot,()=>{const was=el.classList.contains('open');closeAllDD();if(!was)el.classList.add('open')});
+  el.appendChild(dot);el.appendChild(lbl);el.appendChild(dd);
+  cw.appendChild(el);sym.el=el;
+}
+function makeDD(sym){
+  const dd=document.createElement('div');dd.className='pdd';
+  const dh=document.createElement('div');dh.className='ddh';
+  const nm=document.createElement('span');nm.className='ddh-name';nm.textContent=sym.name||'未設定';dh.appendChild(nm);
+  if(sym.type){const b=document.createElement('span');b.className='ddbadge';b.textContent=sym.type;dh.appendChild(b)}
+  dd.appendChild(dh);
+  if(sym.files&&sym.files.length){
+    sym.files.forEach(f=>{
+      const it=document.createElement('div');it.className='ddi';
+      it.innerHTML=`<span class="ddi-icon">${ficon(f.mime)}</span><span class="ddi-name">${esc(f.name)}</span>`;
+      addTap(it,()=>{openFov(f);closeAllDD()});dd.appendChild(it);
+    });
+  }else{
+    const em=document.createElement('div');em.className='ddempty';em.textContent='ファイル未登録';dd.appendChild(em);
+  }
+  const ed=document.createElement('div');ed.className='ddedit';
+  ed.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>編集 / ファイル追加`;
+  addTap(ed,()=>{openEdit(sym.id);closeAllDD()});dd.appendChild(ed);
+  return dd;
+}
+function addTap(el,fn){
+  let m=false;
+  el.addEventListener('touchstart',e=>{e.stopPropagation();m=false},{passive:true});
+  el.addEventListener('touchmove', ()=>{m=true},{passive:true});
+  el.addEventListener('touchend',  e=>{e.stopPropagation();e.preventDefault();if(!m)fn()},{passive:false});
+  el.addEventListener('click',     e=>{e.stopPropagation();fn()});
+}
+function ficon(mime){
+  const a=`width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"`;
+  if(mime&&mime.startsWith('image'))return`<svg ${a}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21 15 16 10 5 21"/></svg>`;
+  return`<svg ${a}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+}
+function closeAllDD(){document.querySelectorAll('.pin.open').forEach(e=>e.classList.remove('open'))}
+document.addEventListener('click',closeAllDD);
+
+/* TOUCH: cw handles pan + pinch + tap-to-place */
+let g={type:null};
+function d2(a,b){return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)}
+function m2(a,b){return{x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2}}
+cw.addEventListener('touchstart',e=>{
+  e.preventDefault();const ts=[...e.touches];
+  if(ts.length===1){g={type:'pend',sx:ts[0].clientX,sy:ts[0].clientY,lx:ts[0].clientX,ly:ts[0].clientY,moved:false,tgt:e.target};}
+  else if(ts.length===2){closeAllDD();g={type:'pinch',d0:d2(ts[0],ts[1]),s0:scale,m0:m2(ts[0],ts[1])};}
+},{passive:false});
+cw.addEventListener('touchmove',e=>{
+  e.preventDefault();const ts=[...e.touches];
+  if(g.type==='pinch'&&ts.length>=2){
+    const d=d2(ts[0],ts[1]),ns=Math.min(maxSc,Math.max(minSc,g.s0*(d/g.d0))),mv=m2(ts[0],ts[1]);
+    panX=mv.x-(g.m0.x-panX)*(ns/scale)-(g.m0.x-mv.x);
+    panY=mv.y-(g.m0.y-panY)*(ns/scale)-(g.m0.y-mv.y);
+    scale=ns;applyT();showZind();return;
+  }
+  if((g.type==='pend'||g.type==='pan')&&ts.length===1){
+    if(Math.hypot(ts[0].clientX-g.sx,ts[0].clientY-g.sy)>10)g.moved=true;
+    if(g.moved){g.type='pan';panX+=ts[0].clientX-g.lx;panY+=ts[0].clientY-g.ly;applyT();}
+    g.lx=ts[0].clientX;g.ly=ts[0].clientY;
+  }
+},{passive:false});
+cw.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(g.type==='pend'&&!g.moved&&!g.tgt.closest('.pin')&&pdfDoc&&placing){
+    const r=cw.getBoundingClientRect();
+    const cx=(g.sx-r.left-panX)/scale,cy=(g.sy-r.top-panY)/scale;
+    if(cx>=0&&cy>=0&&cx<=cvs.width&&cy<=cvs.height)placeSymbol(cx,cy);
+  }
+  if(g.type==='pinch'&&e.touches.length<2)renderPage(false);
+  if(e.touches.length===0)g={type:null};
+},{passive:false});
+
+/* mouse */
+let md=false,mm=false,msx,msy,mlx,mly;
+cw.addEventListener('mousedown',e=>{if(e.button)return;md=true;mm=false;msx=mlx=e.clientX;msy=mly=e.clientY});
+window.addEventListener('mousemove',e=>{if(!md)return;if(Math.hypot(e.clientX-msx,e.clientY-msy)>4)mm=true;if(mm){panX+=e.clientX-mlx;panY+=e.clientY-mly;applyT();}mlx=e.clientX;mly=e.clientY});
+window.addEventListener('mouseup',e=>{if(!md)return;md=false;if(!mm&&pdfDoc&&placing&&!e.target.closest('.pin')){const r=cw.getBoundingClientRect();const cx=(e.clientX-r.left-panX)/scale,cy=(e.clientY-r.top-panY)/scale;if(cx>=0&&cy>=0&&cx<=cvs.width&&cy<=cvs.height)placeSymbol(cx,cy);}});
+cw.addEventListener('wheel',e=>{e.preventDefault();const ns=Math.min(maxSc,Math.max(minSc,scale*(e.deltaY<0?1.1:0.9)));const r=cw.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;panX=mx-(mx-panX)*(ns/scale);panY=my-(my-panY)*(ns/scale);scale=ns;applyT();showZind();},{passive:false});
+
+/* PLACE */
+function placeSymbol(cx,cy){
+  const sym={id:Date.now()+'_'+Math.random().toString(36).slice(2),name:'',type:'',memo:'',files:[],x:cx,y:cy,pageNum:curPage,el:null};
+  symbols.push(sym);makePinEl(sym);updateSB();openEdit(sym.id);setSt('シンボルを配置しました');
+}
+
+/* SIDEBAR */
+function updateSB(){
+  const list=document.getElementById('sym-list');list.innerHTML='';
+  document.getElementById('scnt').textContent=`(${symbols.length})`;
+  [...symbols].reverse().forEach(s=>{
+    const d=document.createElement('div');d.className='si';
+    d.innerHTML=`<div class="si-name">${esc(s.name)||'(未設定)'}</div><div class="si-sub">${esc(s.type)||'—'} · P.${s.pageNum}</div><div class="si-fc">${s.files.length}件のファイル</div>`;
+    d.addEventListener('click',()=>{if(sbOpen)toggleSB();if(s.pageNum!==curPage){curPage=s.pageNum;renderPage().then(()=>hlPin(s.id));}else hlPin(s.id);});
+    list.appendChild(d);
+  });
+}
+function toggleSB(){sbOpen=!sbOpen;document.getElementById('sb').classList.toggle('off',!sbOpen);document.getElementById('btn-sb').classList.toggle('on',sbOpen)}
+function hlPin(id){const el=document.querySelector(`.pin[data-id="${id}"]`);if(!el)return;closeAllDD();el.classList.add('open')}
+document.getElementById('btn-sb').addEventListener('click',toggleSB);
+
+/* EDIT MODAL */
+function openEdit(id){
+  editId=id;const s=symbols.find(x=>x.id===id);
+  document.getElementById('fn').value=s.name||'';
+  document.getElementById('ft').value=s.type||'';
+  document.getElementById('fm').value=s.memo||'';
+  editFiles=[...s.files.map(f=>({...f}))];renderFList();
+  document.getElementById('etitle').textContent=s.name||'シンボル編集';
+  document.getElementById('ov').classList.add('show');
+  setTimeout(()=>document.getElementById('fn').focus(),300);
+}
+function renderFList(){
+  const c=document.getElementById('ffiles');c.innerHTML='';
+  editFiles.forEach((f,i)=>{
+    const r=document.createElement('div');r.className='frow';
+    r.innerHTML=`<span style="color:var(--tx2)">${ficon(f.mime)}</span><span>${esc(f.name)}</span><button class="fdel">✕</button>`;
+    r.querySelector('.fdel').addEventListener('click',()=>{editFiles.splice(i,1);renderFList()});
+    c.appendChild(r);
+  });
+}
+document.getElementById('in-attach').addEventListener('change',async function(){
+  for(const f of this.files){const d=await toDataURL(f);editFiles.push({name:f.name,dataURL:d,mime:f.type});}
+  renderFList();this.value='';
+});
+document.getElementById('emsave').addEventListener('click',()=>{
+  const s=symbols.find(x=>x.id===editId);if(!s)return;
+  s.name=document.getElementById('fn').value.trim();
+  s.type=document.getElementById('ft').value.trim();
+  s.memo=document.getElementById('fm').value.trim();
+  s.files=[...editFiles];renderAllPins();updateSB();
+  document.getElementById('ov').classList.remove('show');
+  toast(`「${s.name||'シンボル'}」を保存しました`);
+});
+document.getElementById('emdel').addEventListener('click',()=>{
+  if(!confirm('削除しますか？'))return;
+  const i=symbols.findIndex(x=>x.id===editId);
+  if(i>=0){if(symbols[i].el)symbols[i].el.remove();symbols.splice(i,1);}
+  updateSB();document.getElementById('ov').classList.remove('show');toast('削除しました');
+});
+document.getElementById('emx').addEventListener('click',()=>{
+  const s=symbols.find(x=>x.id===editId);
+  if(s&&!s.name&&s.files.length===0){if(s.el)s.el.remove();symbols=symbols.filter(x=>x.id!==editId);updateSB();}
+  document.getElementById('ov').classList.remove('show');
+});
+document.getElementById('ov').addEventListener('click',e=>{if(e.target===document.getElementById('ov'))document.getElementById('emx').click()});
+
+/* FILE VIEWER */
+function openFov(f){
+  document.getElementById('fov-name').textContent=f.name;
+  const img=document.getElementById('fov-img'),pdfw=document.getElementById('fov-pdfw'),msg=document.getElementById('fov-msg');
+  img.style.display='none';pdfw.style.display='none';msg.style.display='none';
+  if(f.mime&&f.mime.startsWith('image')){img.src=f.dataURL;img.style.display='block';}
+  else if(f.mime==='application/pdf'){
+    if(/iP(hone|ad|od)/.test(navigator.userAgent)){
+      msg.innerHTML='PDFは別タブで開きます<br><br><button onclick="window.open(\''+f.dataURL+'\',\'_blank\')" style="padding:12px 24px;background:var(--ac);color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;touch-action:manipulation">開く ↗</button>';
+      msg.style.display='block';
+    }else{document.getElementById('fov-iframe').src=f.dataURL;pdfw.style.display='block';}
+  }else{msg.innerHTML='このファイル形式はプレビューできません';msg.style.display='block';}
+  document.getElementById('fov').classList.add('show');
+}
+document.getElementById('fov-x').addEventListener('click',()=>{document.getElementById('fov').classList.remove('show');document.getElementById('fov-iframe').src=''});
+
+/* SAVE */
+document.getElementById('btn-save').addEventListener('click',()=>{
+  if(symbols.length===0){toast('シンボルがありません');return;}
+  const data={version:3,pdfFileName,pdfDataURL,symbols:symbols.map(s=>({id:s.id,name:s.name,type:s.type,memo:s.memo,x:s.x,y:s.y,pageNum:s.pageNum,files:s.files.map(f=>({name:f.name,mime:f.mime,dataURL:f.dataURL}))}))};
+  const json=JSON.stringify(data),fname=(pdfFileName.replace(/\.pdf$/i,'')||'zumen')+'.zumen';
+  if(/iP(hone|ad|od)/.test(navigator.userAgent)&&navigator.share){
+    const blob=new Blob([json],{type:'application/octet-stream'});
+    navigator.share({files:[new File([blob],fname,{type:'application/octet-stream'})],title:fname})
+      .then(()=>toast('ファイルに保存してください'))
+      .catch(err=>{if(err.name!=='AbortError')toast('共有に失敗しました')});
+  }else{
+    const url=URL.createObjectURL(new Blob([json],{type:'application/octet-stream'}));
+    const a=Object.assign(document.createElement('a'),{href:url,download:fname});
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast(`「${fname}」を保存しました`);
+  }
+});
+
+/* LOAD */
+async function loadFromJSON(json,label){
+  try{
+    const data=JSON.parse(json);
+    if(!data.symbols)throw new Error('invalid');
+    symbols=data.symbols.map(s=>({...s,el:null}));
+    pdfFileName=data.pdfFileName||'';
+    if(data.pdfDataURL){
+      setSt('図面を復元中...');
+      await loadPDFfromB64(data.pdfDataURL);
+      renderAllPins();updateSB();
+      toast(`${symbols.length}件のシンボルと図面を復元しました`);
+      setSt(`「${pdfFileName}」を復元しました`);
+    }else{
+      renderAllPins();updateSB();
+      toast(`${symbols.length}件のシンボルを読み込みました`);
+      setSt('シンボルを読み込みました — PDFを開いてください');
+    }
+  }catch(e){toast('読み込みに失敗しました');console.error(e)}
+}
+
+/* FILE INPUT LISTENERS — all outside touch-action:none area */
+document.getElementById('in-pdf').addEventListener('change',function(){const f=this.files[0];if(f)loadPDF(f);this.value=''});
+document.getElementById('in-pdf2').addEventListener('change',function(){const f=this.files[0];if(f)loadPDF(f);this.value=''});
+document.getElementById('in-proj').addEventListener('change',async function(){const f=this.files[0];if(!f)return;await loadFromJSON(await f.text(),f.name);this.value=''});
+
+/* TOOLBAR BUTTONS */
+document.getElementById('btn-place').addEventListener('click',()=>{
+  placing=!placing;const b=document.getElementById('btn-place');
+  b.classList.toggle('on',placing);
+  b.innerHTML=placing?'<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>配置':'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>閲覧';
+  setSt(placing?'配置モード: シンボル位置をタップ':'閲覧モード: ピンをタップしてメニュー表示');
+});
+document.getElementById('btn-prev').addEventListener('click',async()=>{if(curPage>1){curPage--;await renderPage(true)}});
+document.getElementById('btn-next').addEventListener('click',async()=>{if(curPage<totalPages){curPage++;await renderPage(true)}});
+function chSc(f){const ns=Math.min(maxSc,Math.max(minSc,scale*f));const cx=cw.clientWidth/2,cy=cw.clientHeight/2;panX=cx-(cx-panX)*(ns/scale);panY=cy-(cy-panY)*(ns/scale);scale=ns;applyT();showZind()}
+document.getElementById('btn-zi').addEventListener('click',()=>chSc(1.3));
+document.getElementById('btn-zo').addEventListener('click',()=>chSc(1/1.3));
+document.getElementById('btn-fit').addEventListener('click',()=>{if(pdfDoc)fitPage()});
+window.addEventListener('resize',()=>{if(pdfDoc)fitPage()});
+</script>
+</body>
+</html>
